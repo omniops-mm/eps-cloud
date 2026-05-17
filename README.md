@@ -6,6 +6,8 @@ As a summary, this is a programmed version of the AI based productivity system I
 
 The technical aim is a deployable webapp that handles streaks, schedules daily tasks, calendar integration, weather reports and logs habits.
 
+I intend on populating this section with instructions on how to set it up. For more information on the app and future versions, read docs/architecture.md
+
 Status: design phase. No code yet. 
 
 License: MIT (see `LICENSE`).

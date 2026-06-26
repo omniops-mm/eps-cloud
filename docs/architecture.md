@@ -1,8 +1,6 @@
 # EPS Architecture
 
-This document covers the technical shape of EPS in the form of components, data model, patterns, and how I'm building it over time. For less detailed/more surface level information on what EPS *is* and why it exists, the [README](../README.md) is the starting point.
-
-This is a living document. EPS is pre-v0.1 at the moment so a lot will change. I'll update this as decisions land and code lands.
+This document covers the technical side of EPS: the components, the data model, the patterns, and how it gets built up over the versions. For what EPS is and why it exists, start with the [README](../README.md).
 
 ---
 
@@ -24,34 +22,46 @@ As a note, this whole project is moreso a learning project than a product. I am 
 
 ## Roadmap
 
-EPS evolves through tagged versions. Each tag adds a substantial layer to either the product, the infrastructure, or both.
+EPS evolves through tagged versions. Each tag adds one real piece of infrastructure rather than just shipping features, so the commit history is itself part of the story.
 
-| Version  | What it adds                                                                                                                                                                                                                                                                                   |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **v0.1** | Foundation: local Python webapp with a Postgres database, scheduled background jobs, a working dashboard with streaks / trackers / tasks / daily metrics, Google Calendar + weather integration. Runs on a single Ubuntu machine via systemd.                                                  |
-| **v0.2** | Multi-distro reproducibility. A Bash bootstrap script that sets up a fresh Ubuntu / Debian / Fedora VM end-to-end. Demonstrates Linux fluency across distros.                                                                                                                                  |
-| **v0.3** | Ansible roles replace the Bash bootstrap. Same deployment, idempotent, configuration-management style. Secrets handled via Ansible Vault.                                                                                                                                                      |
-| **v0.4** | Terraform provisions the local VM (via libvirt or Vagrant); Ansible deploys onto it. Infrastructure-as-code locally.                                                                                                                                                                           |
-| **v1.0** | AWS deployment. Terraform builds a custom VPC with multi-AZ subnets, an internet gateway and NAT gateway, route tables, security groups, and NACLs. RDS for Postgres. EC2 for the webapp. Hand-rolled networking on purpose -> practical AWS skill development, not the default-VPC easy path. |
-| **v1.x** | Kubernetes migration. EKS with Helm charts per service tier, NetworkPolicies, persistent volumes, ingress controllers, Prometheus + Grafana observability, optional ArgoCD for GitOps. The portfolio centerpiece.                                                                              |
+### The shape of the app
 
-This is sequenced so each version is a meaningful learning step, not just a tooling check-the-box. The commit history is part of the story. 
+EPS runs as four containers, each with one job:
+
+- **nginx** out front as the reverse proxy and TLS terminator
+- the **web app**, a Python service that serves the API and the server-rendered UI. There is no separate single-page frontend; the HTML comes out of the same service.
+- the **worker**, a background scheduler that runs the five cron-style jobs (calendar fetch, weather fetch, stale-task flagging, audit cleanup, token refresh). Locally that is APScheduler; on Kubernetes it becomes CronJobs.
+- **Postgres** for storage
+
+Four and not one fat container because the request path, the background jobs, and the database are genuinely different concerns. Four and not fifteen because splitting a single-user app into a streaks-service and a tasks-service would be busywork. Four tiers is enough to have a real network topology and real policy between the tiers without pretending the app is bigger than it is.
+
+### The version ladder
+
+| Version | What it adds |
+| --- | --- |
+| **v0.1** | The four containers under Docker Compose, locally. Multi-stage non-root Dockerfiles, a private network, healthchecks, a named Postgres volume. Alembic migrations from the first commit. CI on GitHub Actions: ruff, mypy, pytest, build, and the first security scans (gitleaks, Trivy). Images to GHCR by commit SHA, never `:latest`. |
+| **v0.2** | Ansible provisions a cheap cloud VM, installs Docker, and brings the Compose stack up, with secrets in Ansible Vault. The first version anyone can actually visit, a live URL months before any Kubernetes or AWS bill. |
+| **v0.3** | The Compose stack becomes Helm charts on a local kind or k3d cluster. NetworkPolicies, the worker's jobs as CronJobs, probes, resource limits, an HPA, ingress-nginx and cert-manager for real TLS, a k6 load test that trips the autoscaler, and a small Prometheus + Grafana. All free, all local. |
+| **v1.0** | AWS via Terraform. A hand-rolled VPC (custom CIDR, public and private subnets across two AZs, IGW, NAT, route tables, security groups, NACLs), RDS for Postgres, IAM, and remote state on S3 with DynamoDB locking. CI grows a CD half that authenticates to AWS through OIDC, so no long-lived keys sit anywhere. tfsec or Checkov on the Terraform, Budgets and Infracost on the bill. Hand-rolled networking on purpose, not the default-VPC shortcut, because that is the part interviews dig into. |
+| **v1.x** | The app on EKS, the capstone. The same Helm charts deploy behind an ALB. IRSA for keyless AWS access, Secrets Manager through the External Secrets Operator, a full Prometheus / Grafana / Alertmanager / Loki stack, and deploys moved to GitOps with ArgoCD. Pod Security Admission on top. |
+
+Observability, security, and CI/CD are not single rungs; they are threads that get thicker at every version. The structured logging and the `/metrics` endpoint go into the app back at v0.1, even though the dashboards and alerts do not show up until much later, because logs you can query later only exist if the app emits them properly from the start.
 
 ---
 
 ## Tech Stack
 
-| Layer             | Choice                                                                                         | Why                                                                                                                                                                                                                                    |
-| ----------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Language          | Python 3.x                                                                                     | Already comfortable with it. Fits both the webapp and the schedulers. Broad ecosystem.                                                                                                                                                 |
-| Web framework     | Flask or FastAPI (settling in implementation)                                                  | Both mature, both work. Picking when I start coding.                                                                                                                                                                                   |
-| Database          | PostgreSQL                                                                                     | Real production database from day one. Same engine all the way through v1.0 RDS -> no SQLite-to-Postgres migration tax. JSONB and array support cover all my schema needs.                                                             |
-| Schema migrations | Alembic                                                                                        | Industry standard for Python + Postgres. Versioned, ordered, reversible migrations checked into git.                                                                                                                                   |
-| Scheduler         | APScheduler (v0.1 → v0.4), then AWS EventBridge (v1.0), then Kubernetes CronJob (v1.x)         | Each version uses the simplest scheduler that makes sense for that substrate. APScheduler runs in-process, no infrastructure. EventBridge is cloud-native and managed. CronJob is the K8s primitive. Same problem, evolving solutions. |
-| Frontend          | Web app (framework TBD)                                                                        | Picking when the design phase wraps. Probably something boring -> server-rendered with Tailwind, or React + shadcn if SPA-shaped behavior is needed.                                                                                   |
-| Deployment        | systemd → Bash → Ansible → Terraform → AWS → EKS                                               | The version ladder above.                                                                                                                                                                                                              |
-| Secrets           | `.env` (local) → Ansible Vault (v0.3) → AWS Secrets Manager (v1.0) → Kubernetes Secrets (v1.x) | Evolves with the substrate.                                                                                                                                                                                                            |
-| CI                | GitHub Actions from v0.1 (lint + test), expanding to build + deploy at v1.0                    | Same tool throughout.                                                                                                                                                                                                                  |
+| Layer | Choice | Why |
+| --- | --- | --- |
+| Language | Python 3.x | Know it well; fits the web service and the jobs. |
+| Web framework | Flask or FastAPI | Not picked yet. |
+| Database | PostgreSQL | Same engine locally and in the cloud. JSONB and arrays cover the schema. |
+| Schema migrations | Alembic | Versioned migrations, kept in git. |
+| Scheduler | APScheduler locally, Kubernetes CronJobs on K8s | Runs the five background jobs. |
+| Frontend | Server-rendered HTML | No separate SPA. Templating picked later. |
+| Deployment | Compose -> Ansible VM -> local K8s -> AWS via Terraform -> EKS | The version ladder above. |
+| Secrets | `.env` locally, a managed store once it hits a server and the cloud | Values stay out of git. Exact tooling still being decided. |
+| CI | GitHub Actions | Lint, test, build, image scans from v0.1; deploy added at the cloud stages. |
 
 ---
 
@@ -91,7 +101,7 @@ User-defined per-day quantified data. Two shapes:
 - **Scale**: a 1-5 picker. Good for subjective ratings.
 - **Numeric**: a number with an optional unit. Good for measurements or counts.
 
-I was thinking of creating specific trackers for sleep or weight or what have you but I realised creating the infrastructure to allow the user to create whichever tracker they wanted would be idea. You may scale your mood, energy, sleep duration, sleep quality or how many red cars you saw on that day. 🚗
+I was thinking of creating specific trackers for sleep or weight or what have you but I realised creating the infrastructure to allow the user to create whichever tracker they wanted would be ideal. You may scale your mood, energy, sleep duration, sleep quality or how many red cars you saw on that day.
 
 ### Daily State
 
@@ -105,7 +115,7 @@ A freeform text field for each day. Write whatever you want. It's stored as text
 
 ### Calendar Integration
 
-This pulls events from Google Calendar for the upcoming week. The data gets cached daily at a time you set, and you can also manually trigger a refresh from the dashboard. Events show up in the Scheduled section with a 📅 marker.
+This pulls events from Google Calendar for the upcoming week. The data gets cached daily at a time you set, and you can also manually trigger a refresh from the dashboard. Events show up in the Scheduled section with a calendar marker.
 
 It is intended to be read only. The app does not write anything into the calendar.
 
@@ -141,4 +151,4 @@ The audit log is being captured even though v0.1 doesn't surface it in the UI. I
 
 ---
 
-*This document evolves as the project evolves. Last updated 2026-05-XX (design phase complete).*
+*Last updated 2026-06-26.*

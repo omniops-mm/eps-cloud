@@ -10,7 +10,7 @@ Newest at the bottom. Decisions get superseded rather than deleted, so the reaso
 
 The system EPS (Executive Productivity System) is rebuilt from a previous version, the DPS (Daily Productivity System) that runs fully using Claude Cowork on my machine. It reads freeform text and figures out what I meant, it decides when a grace day applies, it writes me a short daily review. So the first real decision of the project was what happens to all of that in a programmatic rebuild.
 
-The answer I settled on: none of it comes along. Every fuzzy input gets replaced by a structured one. Instead of the system inferring from my journal that I worked out, there is a checkbox. Features that were purely AI prose, like the daily coach review, got cut entirely rather than replaced with some canned template text that would just be worse.
+The answer I settled on: none of it comes along. Every fuzzy input gets replaced by a structured one. Instead of the system inferring from my journal that I worked out, there is a checkbox. Features that were purely AI prose, like the daily or weekly review, got cut entirely rather than replaced with some canned template text that would just be worse.
 
 **Consequence.** Everything in the app is deterministic and testable, which is worth a lot. The cost is that some features of my original system simply do not exist here. If a narrative layer ever comes back it will be a separate deliberate addition, not a default part of the app.
 
@@ -20,7 +20,7 @@ The answer I settled on: none of it comes along. Every fuzzy input gets replaced
 
 A surprising amount of design fell out of one rule: every task has to carry a date. A deadline, a scheduled day, or a remind-after date, but something. There are no dateless tasks, and the quick-add just defaults to today so this never gets in the way.
 
-This killed two concepts I originally carried over from my old system. The "someday/maybe" bucket is gone, because a someday item is just a task scheduled far in the future, and the stale-task prompt will resurface it when it has been sitting untouched too long. And recurrence got removed from tasks entirely. Anything recurring is a tracker, which is its own thing with its own threshold logic. Tasks are one-shot: you do them, they are done.
+This decision basically cleaned the application up as previously, I had entire categories of tasks to sort them into the buckets of those without set dates and those that were just stale from not being touched for too long. Enforcing some kind of scheduling or rescheduling sanitized these. 
 
 **Consequence.** One mental model instead of three. The system can always answer whether something belongs on today's list, because everything has a temporal handle it can be routed by.
 
@@ -32,9 +32,9 @@ The requirement that shaped the data model: editing the past. I want to open a d
 
 So every time-stamped concept gets two tables. A log table that records every event and is the source of truth, and a state table that holds the current computed value, which is what the dashboard reads. After any write to the log, the app calls a recompute function that walks the events and rebuilds the state. The state table is never edited directly by anything.
 
-I looked at two other ways of keeping the cache fresh. Database triggers would do the recompute inside Postgres itself, but then the logic lives somewhere I cannot easily test or debug. Materialized views refresh on a schedule, so reads can be stale, and writing the streak grace rule in SQL did not sound like a good time. Plain Python functions won.
+I looked at two other ways of keeping the cache fresh. Database triggers would do the recompute inside Postgres itself, but then the logic lives somewhere I cannot easily test or debug. Materialized views refresh on a schedule, so reads can be stale, and writing some of the rules in SQL did not sound like a good time. Plain Python functions won.
 
-**Consequence.** Every write path has to remember to call recompute, which is the kind of thing that gets forgotten, so tests pin it down. In exchange, editing the past needs no special handling at all. An edit from three weeks ago and a tick from today go through the exact same code.
+**Consequence.** Every write path has to remember to call recompute. I am going to make it a point to extensively test these so as to make sure it works. In exchange, editing the past needs no special handling at all. An edit from three weeks ago and a tick from today go through the exact same code.
 
 ---
 
@@ -42,7 +42,7 @@ I looked at two other ways of keeping the cache fresh. Database triggers would d
 
 The application will have to do a significant amount of work with databases. This involves many different types of data, states, tracking and so on.
 
-The main choice that existed was the one between SQLite and PostgreSQL. If this application was intended to be just the application itself, meaning there was never a plan of hosting it through Kubernetes or getting it up on AWS and it was just the app itself on whatever device it would run on, then SQLite would be the better choice. Given the totality of the project, in terms of the future and the fact that this is eventually going to be hosted on the cloud, usage of Postgres from the get go was the more future proof choice.
+The main choice that existed was the one between SQLite and PostgreSQL. If this application was intended to be just the application itself, meaning there was never a plan of hosting it and it would be just the app on whatever device it would run on, then SQLite would be the better choice. Given the totality of the project, in terms of the future and the fact that this is eventually going to be hosted on the cloud, usage of Postgres from the get go was the more future proof choice.
 
 **Consequence.** Local development needs a running Postgres, which the Compose setup provides anyway. Alembic comes in from the first commit as well, so every schema change is a versioned migration in git rather than something done by hand.
 
@@ -50,9 +50,9 @@ The main choice that existed was the one between SQLite and PostgreSQL. If this 
 
 ## 5. Single user, on purpose
 
-EPS is built for exactly one user, me. No accounts, no login, no multi-tenancy. The settings table is literally constrained to a single row.
+EPS is built for exactly one user, me. No accounts, no login, no multi-tenancy.
 
-I could have built user handling "while I am at it" but that is work for an audience that does not exist, and this project's actual point is the infrastructure ladder, not a SaaS product. If it ever needs real users that will be a proper rework, and pretending otherwise now would not make that rework smaller.
+I could have built user handling "while I am at it" but that is work for an audience that does not exist, and this project's actual point is the infrastructure ladder, not a SaaS product. I am not going to rule out a hypothetical future where I somehow do get real users but in that case, this project would need a proper rework. 
 
 ---
 

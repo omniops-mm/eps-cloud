@@ -2,7 +2,7 @@
 
 # EPS
 
-**A productivity webapp that assembles your day for you, built deliberately as a DevOps ladder.**
+**A productivity webapp that assembles your day for you, built one piece of infrastructure at a time.**
 
 [![Project Status: WIP](https://www.repostatus.org/badges/latest/wip.svg)](https://www.repostatus.org/#wip)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -97,11 +97,11 @@ EPS runs as four containers, each with one job.
 
 <br>
 
-Four rather than one because the request path, the background jobs and the database are genuinely different concerns. The scheduler should not share a process with the thing serving your dashboard, and the database is its own problem entirely.
+Four rather than one because the request path, the background jobs and the database are different kinds of work. The scheduler should not share a process with the thing serving your dashboard, and the database is its own problem entirely.
 
-Four rather than fifteen because splitting a single-user application into a streaks-service and a tasks-service and so on would be busywork I would have to defend in an interview and could not. Four tiers is enough to have a real network topology, real policy between the tiers and separate scaling, without pretending the app is bigger than it is.
+Four rather than fifteen because splitting a single-user application into a streaks-service and a tasks-service and so on would be busywork. Four tiers is enough to have a real network topology, real policy between the tiers and separate scaling, without pretending the app is bigger than it is.
 
-nginx sits in front for reasons that matter more than they look. It terminates TLS. It serves the static files without waking Python at all. And because gunicorn's sync workers handle one request each at a time, nginx buffering slow clients means a worker is never held hostage by someone on a bad connection. It is also the only container published, so there is exactly one way in, which is where TLS, rate limiting and security headers all get configured. At v0.3 this box becomes ingress-nginx and does the same job.
+nginx earns its spot in front. It terminates TLS. It serves the static files without waking Python at all. And because gunicorn's sync workers handle one request each at a time, nginx buffering slow clients means a worker is never held hostage by someone on a bad connection. It is also the only container published, so there is exactly one way in, which is where TLS, rate limiting and security headers all get configured. At v0.3 this box becomes ingress-nginx and does the same job.
 
 </details>
 
@@ -141,8 +141,8 @@ Each version adds one real piece of infrastructure. The application barely chang
 | --- | --- | --- | --- |
 | **v0.1** | The four containers under Compose. Multi-stage non-root Dockerfiles, pinned bases, a private network, healthchecks, a named Postgres volume. Alembic from the first commit. CI: ruff, mypy, pytest, build, gitleaks and Trivy. Images to GHCR by commit SHA. | That the application is actually built, containerised properly and tested, and that the security and observability threads start at the beginning rather than getting bolted on. | In progress |
 | **v0.2** | Ansible provisions a cheap VM, installs Docker, brings the Compose stack up, with secrets in Ansible Vault. | Configuration management, and it produces the first URL anyone can actually visit, months before there is a Kubernetes or AWS bill. | Planned |
-| **v0.3** | The Compose stack becomes Helm charts on a local kind cluster. NetworkPolicies, the worker's jobs as CronJobs, probes, resource limits, an HPA, ingress-nginx and cert-manager, a k6 load test that trips the autoscaler, and a local Prometheus and Grafana. | The headline skill, built and broken locally for free. Raw manifests first to learn the primitives, then Helm to template them. | Planned |
-| **v1.0** | AWS through Terraform. A hand-rolled VPC with custom CIDR, public and private subnets across two AZs, IGW, NAT, route tables, security groups and NACLs. RDS, IAM, remote state on S3 with DynamoDB locking. CD through GitHub Actions authenticating by OIDC. tfsec or Checkov on the Terraform, Budgets and Infracost on the bill. | Infrastructure as code against a real cloud. The VPC is hand-rolled rather than taking the default-VPC shortcut, because the networking is the part interviews actually dig into. | Planned |
+| **v0.3** | The Compose stack becomes Helm charts on a local kind cluster. NetworkPolicies, the worker's jobs as CronJobs, probes, resource limits, an HPA, ingress-nginx and cert-manager, a k6 load test that trips the autoscaler, and a local Prometheus and Grafana. | Kubernetes, built and broken locally for free. Raw manifests first to learn the primitives, then Helm to template them. | Planned |
+| **v1.0** | AWS through Terraform. A hand-rolled VPC with custom CIDR, public and private subnets across two AZs, IGW, NAT, route tables, security groups and NACLs. RDS, IAM, remote state on S3 with DynamoDB locking. CD through GitHub Actions authenticating by OIDC. tfsec or Checkov on the Terraform, Budgets and Infracost on the bill. | Infrastructure as code against a real cloud. The VPC is hand-rolled rather than taking the default-VPC shortcut, because the default VPC hides exactly the parts I am trying to learn. | Planned |
 | **v1.x** | The same Helm charts onto EKS behind an ALB. IRSA for keyless AWS access, Secrets Manager through the External Secrets Operator, Prometheus, Grafana, Alertmanager and Loki, deploys moved to ArgoCD, Pod Security Admission on top. | The capstone. Managed Kubernetes with the security and observability stories finished rather than sketched. | Planned |
 
 ### The three threads
@@ -176,7 +176,7 @@ Things deliberately left out, and why:
 - **No systemd-on-bare-metal rung and no multi-distro Bash bootstrap.** A container does not care what host it runs on, so scripting a hand-installed VM spends effort proving a problem containers already solved.
 - **No Terraform against a local VM.** Using Terraform to spin up a libvirt box just to run Docker on it teaches nothing that the AWS rung does not teach better. Terraform shows up where it is load-bearing.
 - **No Kustomize.** Helm covers the templating. Authoring both for a four-tier app is padding.
-- **No service mesh.** Istio on a single-user four-tier application is the textbook over-engineering an interviewer would flag.
+- **No service mesh.** Istio on a single-user four-tier application is textbook over-engineering.
 - **No blue-green or canary deploys.** There is no traffic to canary. The rolling-update default plus one paragraph of reasoning answers the question honestly.
 - **No distributed tracing and no separate status page.** Tracing a mostly-synchronous single-user request path is a great deal of work for almost nothing, and a Grafana panel covers the other.
 - **No LLM anywhere in the application.** A structured input UI replaces fuzzy parsing. The irony of that, given where this system currently lives, is not lost on me.
@@ -213,7 +213,7 @@ Every push and every pull request runs the same pipeline. A red build blocks the
   <img alt="On every push: lint with ruff and mypy, run the pytest suite, build the four images and scan them with Trivy, then publish to GHCR tagged by commit SHA." src="docs/img/ci-light.svg">
 </picture>
 
-Two details that matter more than they look. Images are tagged by commit SHA rather than `latest`, so any running container can be traced back to the exact source that produced it. And dependencies are locked, not floated, so a build in November installs exactly what a build in July installed. A vulnerability scan only means something when you know precisely what is inside the image.
+Two details worth pointing out. Images are tagged by commit SHA rather than `latest`, so any running container can be traced back to the exact source that produced it. And dependencies are locked, not floated, so a build in November installs exactly what a build in July installed. A vulnerability scan only means something when you know precisely what is inside the image.
 
 <div align="right"><a href="#top">back to top</a></div>
 
@@ -233,7 +233,7 @@ compose.yml   v0.1 lives here
 deploy/       ansible (v0.2), helm (v0.3), terraform (v1.0), added as they arrive
 ```
 
-There is deliberately no second copy of the application per version. The whole argument of this project is that the app stays still while the infrastructure around it gets serious, and five forked copies of `app/` would quietly contradict that. Version history lives in git tags and releases.
+There is no second copy of the application per version. The point of this project is that the app stays still while the infrastructure around it gets serious, and five forked copies of `app/` would contradict that. Version history lives in git tags and releases.
 
 <div align="right"><a href="#top">back to top</a></div>
 
@@ -241,7 +241,7 @@ There is deliberately no second copy of the application per version. The whole a
 
 ## Design decisions
 
-Short records of each real decision, what it was weighed against and what it costs, are in **[docs/decisions.md](docs/decisions.md)**. They exist because a list of technologies proves nothing on its own. The reasoning is the part worth reading, and writing it down is how I make sure I can still defend it in six months.
+Notes on each real decision, what it was weighed against and what it costs, are in **[docs/decisions.md](docs/decisions.md)**. It is more of a notebook than official documentation. A plain list of technologies would not say much on its own; the reasoning is the interesting part, and writing it down is how I keep hold of it months later.
 
 ---
 

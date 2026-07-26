@@ -1,79 +1,112 @@
 # Design decisions
 
-Short records of the decisions that shaped EPS. Each one says what I chose, what forced the choice, what I weighed it against, and what it costs me.
+I wanted to get as much of my decision making process written down as possible especially when it came down to picking between different tech options. This document is intended as a list of them with it containing important details. Treat this more as a notebook for now than official documentation.
 
-They are here because a list of technologies proves nothing. Anyone can install Flask. The interesting part is what the alternative was and why it lost, and writing that down is how I make sure I can still defend it in six months rather than half-remembering it.
-
-Newest at the bottom. Decisions get superseded rather than deleted, so the reasoning survives even when the answer changes.
+Newest at the bottom. Decisions get superseded rather than deleted, so the reasoning survives multiple iterations of changes.
 
 ---
 
-## 1. Flask, not FastAPI
+## 1. No LLM in the app
 
-**Decided:** 2026-07-22
+The system EPS is rebuilt from runs on an AI. It reads freeform text and figures out what I meant, it decides when a grace day applies, it writes me a short daily review. So the first real decision of the project was what happens to all of that in a programmatic rebuild.
 
-**Context.** EPS needs a web framework. The two live candidates in Python are Flask and FastAPI, and FastAPI is the one currently attracting the attention.
+The answer I settled on: none of it comes along. Every fuzzy input gets replaced by a structured one. Instead of the system inferring from my journal that I worked out, there is a checkbox. Features that were purely AI prose, like the daily coach review, got cut entirely rather than replaced with some canned template text that would just be worse.
 
-**Alternatives.** FastAPI's strengths are validation at the boundary through Pydantic, an automatically generated OpenAPI documentation page, and async concurrency. Every one of those is aimed at a JSON API. EPS returns HTML fragments, so the generated docs page describes nothing and the response models never get used. Async would also mean either async database access, which is a harder pattern with more ways to accidentally block the event loop, or sync code running in threadpools, at which point the async was theatre. Concurrency demand here is one person. Django was ruled out for a different reason: it would replace the layers I specifically want to build by hand, its own ORM instead of SQLAlchemy and its own migrations instead of Alembic, so I would end up learning Django rather than the underlying patterns.
-
-**Consequence.** No async, and no free OpenAPI documentation if EPS ever grows a real API. If that happens the web container is the only thing that would need to change, which is one of the reasons the tiers are split the way they are.
+**Consequence.** Everything in the app is deterministic and testable, which is worth a lot. The cost is that some features of my original system simply do not exist here. If a narrative layer ever comes back it will be a separate deliberate addition, not a default part of the app.
 
 ---
 
-## 2. HTMX, not a single-page application
+## 2. What counts as a task
 
-**Decided:** 2026-07-22
+A surprising amount of design fell out of one rule: every task has to carry a date. A deadline, a scheduled day, or a remind-after date, but something. There are no dateless tasks, and the quick-add just defaults to today so this never gets in the way.
 
-**Context.** The UI is a dashboard of forms and lists where essentially every interaction is a database write. Something has to make those interactions feel immediate rather than reloading the page each time.
+This killed two concepts I originally carried over from my old system. The "someday/maybe" bucket is gone, because a someday item is just a task scheduled far in the future, and the stale-task prompt will resurface it when it has been sitting untouched too long. And recurrence got removed from tasks entirely. Anything recurring is a tracker, which is its own thing with its own threshold logic. Tasks are one-shot: you do them, they are done.
 
-**Alternatives.** A React front end would mean maintaining two applications, a JSON API and a client, plus the contract between them. It introduces client-side state, and client-side state that mirrors server state brings staleness, optimistic updates and cache invalidation with it. Plain HTML forms with no JavaScript at all were a genuine option and would work, but a journal page with fifteen checkboxes reloading on every tick gets old within a day of using it.
-
-**Consequence.** Every interaction is a server round trip, which is fine here and would not be for a highly interactive UI. Rich client-side widgets like drag-and-drop would need an escape hatch. The single vendored `htmx.min.js` is the only JavaScript in the repository, and the quick-add forms and overdue menus use the native `<details>` element, so they work with no script at all.
+**Consequence.** One mental model instead of three. The system can always answer whether something belongs on today's list, because everything has a temporal handle it can be routed by.
 
 ---
 
-## 3. Four containers
+## 3. Events as the truth, with a cache on top
 
-**Decided:** 2026-06-23
+The requirement that shaped the data model: editing the past. I want to open a day from three weeks ago, tick a box I forgot, and have every day since then update correctly.
 
-**Context.** The application has to be split into services somehow, and the number chosen is the thing an interviewer will push on.
+So every time-stamped concept gets two tables. A log table that records every event and is the source of truth, and a state table that holds the current computed value, which is what the dashboard reads. After any write to the log, the app calls a recompute function that walks the events and rebuilds the state. The state table is never edited directly by anything.
 
-**Alternatives.** One container running everything would be simpler to operate but puts the scheduler in the same process as the request path, which are genuinely different kinds of work with different failure modes. Going the other way and splitting a single-user application into per-feature services would be busywork I could not defend.
+I looked at two other ways of keeping the cache fresh. Database triggers would do the recompute inside Postgres itself, but then the logic lives somewhere I cannot easily test or debug. Materialized views refresh on a schedule, so reads can be stale, and writing the streak grace rule in SQL did not sound like a good time. Plain Python functions won.
 
-**Consequence.** Four tiers is enough to have a real network topology and real policy between the tiers without pretending the application is bigger than it is. It also means the Compose stack maps cleanly onto Kubernetes later, since each container becomes its own deployment with its own NetworkPolicy.
+**Consequence.** Every write path has to remember to call recompute, which is the kind of thing that gets forgotten, so tests pin it down. In exchange, editing the past needs no special handling at all. An edit from three weeks ago and a tick from today go through the exact same code.
 
 ---
 
 ## 4. Postgres from the first commit
 
-**Decided:** 2026-05-06
+The application will have to do a significant amount of work with databases. This involves many different types of data, states, tracking and so on.
 
-**Context.** The application needs a database on day one, and the tempting shortcut is SQLite because it needs no server.
+The main choice that existed was the one between SQLite and PostgreSQL. If this application was intended to be just the application itself, meaning there was never a plan of hosting it through Kubernetes or getting it up on AWS and it was just the app itself on whatever device it would run on, then SQLite would be the better choice. Given the totality of the project, in terms of the future and the fact that this is eventually going to be hosted on the cloud, usage of Postgres from the get go was the more future proof choice.
 
-**Alternatives.** SQLite is excellent and tiny, but it has no network layer, no user accounts and no concurrent writers, so a move off it later would be a migration rather than a configuration change. The ladder ends on RDS, which is managed Postgres, and the spec already uses Postgres-specific column types.
-
-**Consequence.** A database server has to be running for local development, which Compose handles anyway. The test suite runs against in-memory SQLite for speed, using portable type variants so the same models compile on both, and CI runs the migrations against a real Postgres so the schema is proven on the engine that actually ships.
+**Consequence.** Local development needs a running Postgres, which the Compose setup provides anyway. Alembic comes in from the first commit as well, so every schema change is a versioned migration in git rather than something done by hand.
 
 ---
 
-## 5. Recompute derived state in the application
+## 5. Single user, on purpose
 
-**Decided:** 2026-05-06
+EPS is built for exactly one user, me. No accounts, no login, no multi-tenancy. The settings table is literally constrained to a single row.
 
-**Context.** Streaks and trackers need a current value that the dashboard can read cheaply, but the truth is the underlying event history, and that history can be edited retroactively.
-
-**Alternatives.** Database triggers would keep the cache fresh automatically but put the logic somewhere invisible, hard to unit test and hard to review, which is the right trade only when several different codebases write to the same database. There is exactly one writer here. Materialised views refresh on a schedule or on demand, so reads can be stale, and expressing the streak grace mechanic in SQL would be genuinely painful.
-
-**Consequence.** Every write path has to remember to call the recompute function, which is a real footgun, so it is covered by tests that pin the behaviour. In exchange the logic is plain Python that can be read and stepped through, and retroactive editing needs no special-case code at all because past and present go through the same path.
+I could have built user handling "while I am at it" but that is work for an audience that does not exist, and this project's actual point is the infrastructure ladder, not a SaaS product. If it ever needs real users that will be a proper rework, and pretending otherwise now would not make that rework smaller.
 
 ---
 
-## 6. Locked dependencies, not floating ones
+## 6. Four containers
 
-**Decided:** 2026-07-22
+My initial idea was to basically just build everything on a singular Linux VM and then containerise out of that, but this way felt a lot better in so far as getting the structure right from the get go. The separation of services is just good as a habit in setting up system architecture.
 
-**Context.** A dependency declared as "3.0 or newer" means a build today and a build in three months can install different code with no change on my side. That is the origin of the oldest complaint in software, which is that it worked on my machine.
+I did not want to go too crazy with microservices and whatnot. While a singular monolith structure was out of the question, the goal was a middle ground that kept things separate without overcomplication.
 
-**Alternatives.** Floating versions are the least work and were what I started from. Pinning exact versions by hand is nearly free but only pins what I named directly, leaving every transitive dependency still drifting, which is most of the tree. A lock file generated by `uv` pins the whole tree and records a hash for each package.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/topology-dark.svg">
+  <img alt="The four containers: nginx in front, the web app and the worker behind it, Postgres at the bottom, all inside one private network." src="img/topology-light.svg">
+</picture>
 
-**Consequence.** Upgrades become a deliberate act rather than something that happens to me, and the lock file is one more thing to keep current. In exchange builds are reproducible, and the hashes mean a package altered on the index fails the install instead of silently entering the image. That also makes the Trivy scan meaningful, since a vulnerability report is only worth reading when you know exactly what is inside the image.
+Four tiers is enough to have a real network topology and real policy between the tiers without pretending the application is bigger than it is. nginx is the only container exposed to the outside, the worker takes no inbound traffic at all, and the scheduled jobs live in their own process rather than inside the web app (APScheduler now, Kubernetes CronJobs later). Additionally, containerising early on makes the later stages of the roadmap easier. It maps more cleanly onto Kubernetes, since each container becomes its own deployment with its own NetworkPolicy.
+
+---
+
+## 7. Choice of Flask
+
+**Context.** EPS needs a web framework. While the obvious choice from the start was just Flask, I wanted to see if there were perhaps better options that could be used. Given the long horizon nature of the project, some way of ensuring I did not have to repeat work down the line was a priority. I began to evaluate options such as FastAPI and Django.
+
+This choice was quite important because it more or less colours the entire architecture of the application. Is this a webapp served to the user? Or is this an API?
+
+I personally leaned on the webapp aspect because for the vast majority of the project it would basically just be interacted with by a single user. I would rather develop it through and get it right instead of developing it for scale from the get go and adding unnecessary complexity. Flask won out in the end.
+
+**Consequence.** This choice locks in a significant part of our stack and the structure of the application. In the future it is a limitation to be worked around, although the benefits far outweigh the drawbacks.
+
+---
+
+## 8. HTMX, not a single-page application
+
+**Context.** The UI is a dashboard of forms and lists where essentially every interaction is a database write. Something has to make those interactions feel immediate rather than reloading the page each time.
+
+My initial instincts were pointing me towards having a client/server split, in so far as having the user interact with their own end which writes to and updates the backend. This added more complexity in the form of the maintenance of a JSON API, the different sides involved and the updates between them. How would things sync? How do we deal with states not matching each other?
+
+I realised that the user interface I had envisioned for this application was not intended to be that complicated or rich and interactive. I opted for the simpler choice in the matter.
+
+**Consequence.** Every interaction is a server round trip, which is fine here but would not be for a highly interactive UI. Richer client-side widgets like a drag-and-drop would need specific considerations.
+
+---
+
+## 9. Secrets stay out of git, and no Vault
+
+The rule from the start: code goes in git, secret values never. Locally that means a gitignored `.env` file with a committed `.env.example` documenting what the app needs, and a gitleaks hook so nothing slips into a commit by accident.
+
+The decision worth writing down is further up the ladder. I looked at running HashiCorp Vault and decided against it. It is a whole extra service to operate, and for this project it buys the same result that a managed secrets store gives me without the operational weight. So the progression is Ansible Vault when a VM enters the picture, and AWS Secrets Manager once the cloud does.
+
+---
+
+## 10. Dependencies are locked, not floating
+
+I originally had dependencies declared loosely, along the lines of "this version or newer". The problem with that is quiet drift: a build today and a build in three months can pull different package versions with zero changes on my side, and things break or change behaviour with nothing in git to explain why.
+
+Pinning the versions I name directly is not enough either, because each package brings its own dependencies and those would still float. So the repo uses `uv` with a committed lock file: every package in the whole tree at an exact version, each with a checksum. Installs are the same everywhere, and a package that got tampered with on the index fails the install instead of silently ending up in the image.
+
+**Consequence.** Upgrading a dependency is now a deliberate act instead of something that happens to me, which is the point. It also makes the image scanning in CI actually mean something, since a vulnerability scan is only as good as your certainty about what is in the image.

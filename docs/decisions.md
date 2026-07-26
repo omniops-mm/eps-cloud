@@ -8,7 +8,7 @@ Newest at the bottom. Decisions get superseded rather than deleted, so the reaso
 
 ## 1. No LLM in the app
 
-The system EPS is rebuilt from runs on an AI. It reads freeform text and figures out what I meant, it decides when a grace day applies, it writes me a short daily review. So the first real decision of the project was what happens to all of that in a programmatic rebuild.
+The system EPS (Executive Productivity System) is rebuilt from a previous version, the DPS (Daily Productivity System) that runs fully using Claude Cowork on my machine. It reads freeform text and figures out what I meant, it decides when a grace day applies, it writes me a short daily review. So the first real decision of the project was what happens to all of that in a programmatic rebuild.
 
 The answer I settled on: none of it comes along. Every fuzzy input gets replaced by a structured one. Instead of the system inferring from my journal that I worked out, there is a checkbox. Features that were purely AI prose, like the daily coach review, got cut entirely rather than replaced with some canned template text that would just be worse.
 

@@ -86,24 +86,12 @@ EPS runs as four containers, each with one job.
   <img alt="A browser reaches nginx over port 443. nginx is the only container published outside the private network and proxies to the web container on port 8000. A separate worker container takes no inbound traffic. Both web and worker talk to Postgres." src="docs/img/topology-light.svg">
 </picture>
 
-**Serving requests** is Flask under gunicorn, with Jinja2 templates and HTMX. Flask rather than FastAPI because EPS is a server-rendered hypermedia app and not a JSON API, so FastAPI's core strengths, which are Pydantic validation at the boundary, generated OpenAPI docs and async concurrency, would all be carried as dead weight. HTMX rather than React because there is no client-side state worth synchronising here: every interaction is a database write, so the endpoint writes the row and returns the re-rendered fragment in the same round trip. That deletes an entire tier of the architecture, along with the JSON API, the build toolchain and the cache-invalidation problems that come with them.
+- **nginx** is the front door and the only container reachable from the outside. It holds the TLS certificates, serves the static files, and passes everything else inward.
+- **web** is the application itself: Flask running under gunicorn, with every page rendered on the server through Jinja2 templates. The interactive touches come from HTMX, so there is no separate frontend application to maintain.
+- **worker** runs the scheduled jobs (calendar fetch, weather fetch, stale-task flagging, audit cleanup, token refresh) in its own process on APScheduler. Nothing connects to it; it only reaches out.
+- **Postgres** holds the data, accessed through SQLAlchemy, with every schema change applied as a versioned Alembic migration. Its files live on a named volume, so the data outlives the container.
 
-**Holding data** is Postgres with SQLAlchemy 2.x and Alembic, on psycopg3. Postgres from the first commit rather than starting on SQLite, because the ladder ends on RDS and developing against the same engine you deploy on removes a whole category of late surprise. Alembic migrations exist from the first commit for the same reason.
-
-**Delivery** is Docker Compose locally, with GitHub Actions running lint, tests, an image build and the first security scans. Images are tagged by commit SHA and never `latest`. Everything after that is the ladder.
-
-<details>
-<summary>Why four containers and not one, or fifteen</summary>
-
-<br>
-
-Four rather than one because the request path, the background jobs and the database are different kinds of work. The scheduler should not share a process with the thing serving your dashboard, and the database is its own problem entirely.
-
-Four rather than fifteen because splitting a single-user application into a streaks-service and a tasks-service and so on would be busywork. Four tiers is enough to have a real network topology, real policy between the tiers and separate scaling, without pretending the app is bigger than it is.
-
-nginx earns its spot in front. It terminates TLS. It serves the static files without waking Python at all. And because gunicorn's sync workers handle one request each at a time, nginx buffering slow clients means a worker is never held hostage by someone on a bad connection. It is also the only container published, so there is exactly one way in, which is where TLS, rate limiting and security headers all get configured. At v0.3 this box becomes ingress-nginx and does the same job.
-
-</details>
+All four sit on a private network, and the only published port is nginx's. The why behind these picks, Flask over FastAPI, HTMX over a separate frontend, four containers rather than one or fifteen, lives in [the decisions notebook](docs/decisions.md).
 
 <div align="right"><a href="#top">back to top</a></div>
 
@@ -111,18 +99,18 @@ nginx earns its spot in front. It terminates TLS. It serves the static files wit
 
 ## How the data works
 
-Every time-stamped concept in EPS gets two tables: an append-only event table that is the truth, and a derived state table that is a cache. Reads hit the cache. Writes go to the events and then the app rebuilds the cache from them.
+Every number EPS shows you, like a streak counter, is calculated from a permanent history rather than stored as the one true value.
+
+Concretely: when you tick a habit checkbox, the app writes one small row into a log table saying this habit was done on this date. That log only ever grows; nothing in it gets overwritten. The streak count you see is then rebuilt by replaying the log from the start, and the rebuilt number lands in a summary table, which is what the dashboard actually reads.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/model-c-dark.svg">
-  <img alt="Ticking a habit box appends to habit_log, the event table that is the source of truth. The app then recomputes streak_state from those events, and the dashboard reads that cache." src="docs/img/model-c-light.svg">
+  <img alt="Ticking a missed day adds one row to the habit_log history. The app replays the history and rebuilds the streak summary the dashboard reads, so the count corrects itself." src="docs/img/model-c-light.svg">
 </picture>
 
-The cache is never edited directly, which means it cannot drift from the truth. Delete it, recompute, and you get the same numbers back.
+The reason for the two-step setup is editing the past. Open a day from three weeks ago, tick a box you forgot, and the app does exactly what it always does: write the row, rebuild the summary. Every day since your edit comes out right on its own, there is no separate edit-the-past feature, and the summary can never disagree with the history, because it is thrown away and recalculated on every change.
 
-The payoff is retroactive editing. When you open the calendar view and flip a checkbox from three weeks ago, the app writes the event row and recomputes. There is no special-case code for editing the past, because the past and the present go through the same path.
-
-The pattern name is CQRS at small scale: the write model is the normalised event table, the read model is the denormalised state table the dashboard hammers. At this size the sync between them is a synchronous function call rather than a message bus, so there is no eventual consistency to reason about. The reasoning for choosing this over database triggers or materialised views is in [the decisions doc](docs/decisions.md).
+More on why it is built this way, and what it was weighed against, in [the decisions notebook](docs/decisions.md).
 
 <div align="right"><a href="#top">back to top</a></div>
 
@@ -134,7 +122,7 @@ Each version adds one real piece of infrastructure. The application barely chang
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/ladder-dark.svg">
-  <img alt="Five rungs rising left to right: v0.1 Compose, v0.2 Ansible, v0.3 Kubernetes, v1.0 Terraform, v1.x EKS." src="docs/img/ladder-light.svg">
+  <img alt="A staircase rising left to right: v0.1 Compose in progress, then v0.2 Ansible, v0.3 Kubernetes, v1.0 Terraform and v1.x EKS, planned." src="docs/img/ladder-light.svg">
 </picture>
 
 | Version | What it adds | What it is there to prove | Status |

@@ -17,7 +17,11 @@ def get_engine() -> Engine:
     global _engine
     if _engine is None:
         # pool_pre_ping: swap out dead pooled connections instead of erroring
-        _engine = create_engine(get_settings().database_url, pool_pre_ping=True)
+        _engine = create_engine(
+            get_settings().database_url,
+            pool_pre_ping=True,
+            connect_args={"connect_timeout": 3},
+        )
     return _engine
 
 

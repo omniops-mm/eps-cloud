@@ -210,6 +210,26 @@ def test_a_retroactive_fix_repairs_the_streak(session, build):
     assert state.current_streak == 5
 
 
+def test_recompute_sees_unflushed_writes(session, build):
+    # the app runs sessions with autoflush off; recompute must still see rows
+    # that were added but not yet flushed, or every new entry is off by one
+    import datetime
+
+    from sqlalchemy.orm import Session as RawSession
+
+    from app.models import HabitLog
+    from tests.conftest import START
+
+    streak_id = build.streak()
+    build.log(streak_id, "PPP")
+
+    raw = RawSession(bind=session.get_bind(), autoflush=False)
+    raw.add(HabitLog(date=START + datetime.timedelta(days=3), streak_id=streak_id, passed=True))
+    state = recompute_streak_state(raw, streak_id, today=days(3))
+
+    assert state.current_streak == 4
+
+
 def test_a_tracker_never_done_reports_nothing(session, build):
     tracker_id = build.tracker()
 

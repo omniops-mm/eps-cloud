@@ -40,6 +40,9 @@ def recompute_streak_state(
     with no entry counts as a failure, with two exceptions: a day the user
     marked as a bad day, and today, which is not over yet.
     """
+    # the caller may hold unflushed event rows; without this the queries below
+    # read the database as it was before those writes and miss them
+    session.flush()
     logged = {
         row.date: row.passed
         for row in session.scalars(select(HabitLog).where(HabitLog.streak_id == streak_id))
@@ -92,6 +95,8 @@ def recompute_tracker_state(
     A tracker that has never been done reports zero days and no last-done date,
     so it does not read as overdue before it has been used once.
     """
+    # same reason as in recompute_streak_state: see the caller's pending writes
+    session.flush()
     last_done = session.scalar(
         select(func.max(TrackerEvent.date)).where(
             TrackerEvent.tracker_id == tracker_id,

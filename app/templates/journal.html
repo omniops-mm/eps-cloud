@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Journal · {{ day.isoformat() }}{% endblock %}
+
+{% block content %}
+<header class="day-plate">
+  <p class="day-plate-kicker">Daily journal</p>
+  <h1 class="day-plate-weekday">{{ day.strftime("%A") }}</h1>
+  <p class="day-plate-date">
+    {{ day.strftime("%d %B %Y") }}
+    {% if day == today %}<span class="chip chip-accent">today</span>{% endif %}
+  </p>
+</header>
+
+<section class="card">
+  <h2 class="card-title">Habits</h2>
+  {% if rows %}
+  <ul class="row-list">
+    {% for row in rows %}
+      {% with streak = row.streak, state = row.state, entry = row.entry %}
+        {% include "fragments/habit_row.html" %}
+      {% endwith %}
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty-note">No habits yet. Add the first one under Settings.</p>
+  {% endif %}
+</section>
+{% endblock %}

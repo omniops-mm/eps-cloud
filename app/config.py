@@ -10,6 +10,9 @@ class Settings(BaseSettings):
 
     database_url: str
     secret_key: str
+    # IANA timezone name. Dates shown to the user are computed in this zone,
+    # not in the server's clock, which runs UTC inside containers.
+    tz: str = "Europe/Berlin"
 
 
 @lru_cache

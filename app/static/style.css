@@ -1,0 +1,246 @@
+/* One stylesheet for the whole app. Colors, spacing and type live in the
+   variables below; components only ever reference variables, so a theme is
+   one block to swap. */
+
+/* ---------- tokens ---------- */
+
+:root {
+  /* warm graphite, deliberately not pure black */
+  --bg: #17181c;
+  --surface: #1f2126;
+  --surface-raised: #24262c;
+  --border: #2c2f36;
+
+  --text: #e9e6e0;
+  --text-muted: #98948b;
+
+  /* one brand accent; red and green are semantic only */
+  --accent: #e8a13d;
+  --accent-soft: #e8a13d29;
+  --danger: #e5484d;
+  --danger-soft: #e5484d24;
+  --ok: #6fbf73;
+  --ok-soft: #6fbf7324;
+
+  --radius: 12px;
+  --radius-pill: 999px;
+
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: system-ui, "Segoe UI", sans-serif;
+}
+
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("fonts/SpaceGrotesk.woff2") format("woff2");
+  font-weight: 300 700;
+  font-display: swap;
+}
+
+/* ---------- base ---------- */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
+
+.page {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+/* ---------- day plate ---------- */
+
+.day-plate {
+  padding: 1.5rem 0 2rem;
+}
+
+.day-plate-kicker {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.day-plate-weekday {
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 6vw, 3.4rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.day-plate-date {
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* ---------- cards and sections ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.4rem;
+}
+
+.card + .card {
+  margin-top: 1.25rem;
+}
+
+.card-title {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.empty-note {
+  color: var(--text-muted);
+}
+
+/* ---------- chips ---------- */
+
+.chip {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+.chip-accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.chip-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* ---------- habit rows ---------- */
+
+.row-list {
+  list-style: none;
+  padding: 0;
+}
+
+.habit-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 0;
+}
+
+.habit-row + .habit-row {
+  border-top: 1px solid var(--border);
+}
+
+.habit-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.habit-count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.count-days {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.count-label,
+.count-best {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.count-best {
+  margin-left: 0.3rem;
+}
+
+.habit-marks {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mark-btn {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: 1rem;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.mark-pass:hover {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.mark-fail:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.mark-pass.is-active {
+  background: var(--ok-soft);
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.mark-fail.is-active {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}

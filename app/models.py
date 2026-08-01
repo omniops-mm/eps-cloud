@@ -1,9 +1,7 @@
-"""Database tables, straight from the spec (section 4).
-
-Model C throughout: *_log tables are the truth, *_state tables are
-derived caches rebuilt by recompute. Never write to a _state table
-by hand.
-"""
+"""All EPS tables. One pattern throughout: *_log tables are the append-only
+source of truth, *_state tables are derived caches rebuilt by the recompute
+functions. Never write to a _state table by hand. Reasoning: docs/decisions.md,
+entry 3."""
 
 import datetime
 import decimal

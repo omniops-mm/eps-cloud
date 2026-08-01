@@ -42,7 +42,7 @@ One honest note about what this repository is. It is a learning project more tha
 
 ## What it does
 
-Everything below is single-user and settled in the spec. The UI is server-rendered, so there is no separate frontend application.
+Everything below is single-user. The UI is server-rendered, so there is no separate frontend application.
 
 **Streaks** are for forming good habits or minimising bad ones. You define something you want to keep up, like sleeping on time or practising a skill or drinking less coffee, and try to hold the streak. There is a grace mechanic: reach 7 days and you earn one free miss, which replenishes after another 7 days. That exists for things like staying under a calorie target, where you might splurge occasionally without wanting to wipe out a month of progress. It can be turned off.
 

@@ -164,8 +164,12 @@ button {
   padding: 0;
 }
 
+/* fixed-slot rows: the name column stretches, every other column has one
+   width across all rows, so numbers and badges line up down the page */
+
 .habit-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
   align-items: center;
   gap: 1rem;
   padding: 0.7rem 0;
@@ -176,15 +180,12 @@ button {
 }
 
 .habit-name {
-  flex: 1;
   min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 .habit-count {
-  display: flex;
+  display: grid;
+  grid-template-columns: 2.4rem 2.6rem 4.8rem;
   align-items: baseline;
   gap: 0.35rem;
   white-space: nowrap;
@@ -195,16 +196,23 @@ button {
   font-size: 1.35rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .count-label,
-.count-best {
+.count-slot,
+.count-empty {
   color: var(--text-muted);
   font-size: 0.8rem;
 }
 
-.count-best {
-  margin-left: 0.3rem;
+.count-slot {
+  text-align: left;
+}
+
+.count-empty {
+  grid-column: 1 / -1;
+  text-align: right;
 }
 
 .habit-marks {
@@ -243,4 +251,620 @@ button {
   background: var(--danger-soft);
   border-color: var(--danger);
   color: var(--danger);
+}
+
+/* ---------- tracker rows ---------- */
+
+.tracker-row {
+  display: grid;
+  grid-template-columns: 1fr 7rem 3rem 7rem;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.7rem 0;
+}
+
+.metric-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 0;
+}
+
+/* name stretches so the controls sit on the right edge, like every row */
+.metric-row .habit-name {
+  flex: 1;
+}
+
+.tracker-row + .tracker-row,
+.metric-row + .metric-row {
+  border-top: 1px solid var(--border);
+}
+
+.tracker-row.is-done .habit-name {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.tracker-since {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.due-slot {
+  text-align: center;
+}
+
+.tracker-meta {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.done-btn {
+  padding: 0.4rem 0;
+  width: 7rem;
+  text-align: center;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.done-btn:hover {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.done-btn.is-active {
+  background: var(--ok-soft);
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+/* ---------- metric rows ---------- */
+
+.scale-group {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.scale-btn {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+/* each button carries --frac (0 = bottom of the scale, 1 = top); the active
+   and hover colors blend from red to green along it */
+.scale-btn:hover,
+.scale-btn.is-active {
+  border-color: color-mix(in oklab, var(--ok) calc(var(--frac) * 100%), var(--danger));
+  color: color-mix(in oklab, var(--ok) calc(var(--frac) * 100%), var(--danger));
+}
+
+.scale-btn.is-active {
+  background: color-mix(in oklab, var(--ok-soft) calc(var(--frac) * 100%), var(--danger-soft));
+}
+
+.metric-input {
+  width: 6.5rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.metric-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+/* ---------- notes and bad day ---------- */
+
+.note-area {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.note-area:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.note-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.note-status {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  min-height: 1.1rem;
+}
+
+.back-to-today {
+  color: var(--accent);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.back-to-today:hover {
+  text-decoration: underline;
+}
+
+.badday-btn {
+  padding: 0.4rem 1rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.badday-btn:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.badday-btn.is-active {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ---------- dashboard layout ---------- */
+
+.page-wide {
+  max-width: 70rem;
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+@media (min-width: 56rem) {
+  .dash-grid {
+    grid-template-columns: 3fr 2fr;
+    align-items: start;
+  }
+}
+
+.dash-main > .card + .card,
+.dash-side > .card + .card {
+  margin-top: 1.25rem;
+}
+
+.day-plate-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.journal-btn {
+  display: block;
+  margin-top: 1.25rem;
+  padding: 0.85rem;
+  text-align: center;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #17181c;
+  font-family: var(--font-display);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.journal-btn:hover {
+  filter: brightness(1.08);
+}
+
+/* ---------- task rows ---------- */
+
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.65rem 0;
+}
+
+.task-row + .task-row {
+  border-top: 1px solid var(--border);
+}
+
+.task-row.is-done .task-name {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.task-check {
+  flex-shrink: 0;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: transparent;
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.task-check:hover {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.task-check.is-active {
+  background: var(--ok-soft);
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.task-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.task-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.task-meta {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.chip-muted {
+  background: var(--surface-raised);
+  color: var(--text-muted);
+}
+
+.chip-danger-strong {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* ---------- task menu ---------- */
+
+.task-menu {
+  position: relative;
+}
+
+.task-menu summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  color: var(--text-muted);
+}
+
+.task-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.task-menu summary:hover {
+  background: var(--surface-raised);
+}
+
+.task-menu-panel {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 10;
+  min-width: 13rem;
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+}
+
+.task-menu-panel button,
+.task-menu-panel form button {
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.task-menu-panel button:hover {
+  border-color: var(--accent);
+}
+
+.task-menu-panel form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.task-menu-panel input[type="date"] {
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+/* ---------- snapshot ---------- */
+
+.snap-list {
+  list-style: none;
+  padding: 0;
+}
+
+.snap-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0;
+}
+
+.snap-row + .snap-row {
+  border-top: 1px solid var(--border);
+}
+
+.snap-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.snap-value {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.snap-danger {
+  color: var(--danger);
+}
+
+/* hollow ring = no entry yet today; fills green once logged */
+.snap-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  border: 2px solid var(--text-muted);
+  flex-shrink: 0;
+}
+
+.snap-dot.is-logged {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+/* ---------- add panel ---------- */
+
+.add-panel {
+  position: relative;
+}
+
+.add-btn {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: #17181c;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.add-btn::-webkit-details-marker {
+  display: none;
+}
+
+.add-panel-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 20;
+  width: min(24rem, 90vw);
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.5);
+}
+
+.add-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+}
+
+.add-tabs label {
+  cursor: pointer;
+}
+
+.add-tabs input {
+  position: absolute;
+  opacity: 0;
+}
+
+.add-tabs span {
+  display: inline-block;
+  padding: 0.3rem 0.75rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.add-tabs input:checked + span {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.add-tabs input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* show only the form whose tab is checked */
+.add-form {
+  display: none;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.add-panel:has(input[value="task"]:checked) .add-form-task,
+.add-panel:has(input[value="streak"]:checked) .add-form-streak,
+.add-panel:has(input[value="tracker"]:checked) .add-form-tracker,
+.add-panel:has(input[value="metric"]:checked) .add-form-metric {
+  display: flex;
+}
+
+.add-form input[type="text"],
+.add-form input[type="number"],
+.add-form input[type="date"] {
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+}
+
+.add-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.add-kind input,
+.add-check input {
+  position: absolute;
+  opacity: 0;
+}
+
+.add-kind span,
+.add-check span {
+  display: inline-block;
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.add-kind input:checked + span,
+.add-check input:checked + span {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.add-kind input:focus-visible + span,
+.add-check input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.add-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.add-days {
+  width: 4rem;
+  text-align: center;
+}
+
+.add-unit {
+  flex: 1;
+  min-width: 7rem;
+}
+
+.add-form button[type="submit"] {
+  margin-left: auto;
+  padding: 0.45rem 1.1rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: #17181c;
+  font-weight: 600;
+}
+
+/* ---------- weekday pills ---------- */
+
+.weekday-pills {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.weekday-pill input {
+  position: absolute;
+  opacity: 0;
+}
+
+.weekday-pill span {
+  display: inline-block;
+  width: 2.2rem;
+  padding: 0.3rem 0;
+  text-align: center;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.weekday-pill input:checked + span {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.weekday-pill input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

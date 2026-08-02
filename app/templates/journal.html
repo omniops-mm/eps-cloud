@@ -7,7 +7,10 @@
   <h1 class="day-plate-weekday">{{ day.strftime("%A") }}</h1>
   <p class="day-plate-date">
     {{ day.strftime("%d %B %Y") }}
-    {% if day == today %}<span class="chip chip-accent">today</span>{% endif %}
+    {% if day != today %}
+      <a class="back-to-today" href="/journal/">viewing a past day &middot; back to today</a>
+    {% endif %}
+    {% if bad_day %}<span class="chip chip-danger">bad day</span>{% endif %}
   </p>
 </header>
 
@@ -24,5 +27,53 @@
   {% else %}
   <p class="empty-note">No habits yet. Add the first one under Settings.</p>
   {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="card-title">Trackers</h2>
+  {% if trackers %}
+  <ul class="row-list">
+    {% for row in trackers %}
+      {% with tracker = row.tracker, state = row.state, event = row.event %}
+        {% include "fragments/tracker_row.html" %}
+      {% endwith %}
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty-note">Nothing to track on this day.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="card-title">Daily metrics</h2>
+  {% if metrics %}
+  <ul class="row-list">
+    {% for row in metrics %}
+      {% with metric = row.metric, entry = row.entry %}
+        {% include "fragments/metric_row.html" %}
+      {% endwith %}
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty-note">No metrics yet. Add one under Settings.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="card-title">Notes</h2>
+  <textarea class="note-area" name="note_text" rows="5"
+            placeholder="How did the day go?"
+            hx-post="/journal/{{ day.isoformat() }}/note"
+            hx-trigger="input changed delay:800ms"
+            hx-target="#note-status" hx-swap="innerHTML">{{ note_text }}</textarea>
+  <div class="note-foot">
+    <span class="note-status" id="note-status"></span>
+    <form class="badday-form" method="post" action="/journal/{{ day.isoformat() }}/badday">
+      <button class="badday-btn {{ 'is-active' if bad_day }}" type="submit"
+              aria-pressed="{{ 'true' if bad_day else 'false' }}">
+        {{ "Bad day" if bad_day else "Mark as a bad day" }}
+      </button>
+    </form>
+  </div>
 </section>
 {% endblock %}

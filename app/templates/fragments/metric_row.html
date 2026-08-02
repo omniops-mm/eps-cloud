@@ -1,0 +1,32 @@
+{# Needs: metric, entry (may be none), day. Included by journal.html and
+   returned alone by the metric endpoint. #}
+<li class="metric-row" id="metric-{{ metric.id }}">
+  <div class="habit-name">
+    {{ metric.name }}
+    {% if metric.unit %}<span class="tracker-meta">{{ metric.unit }}</span>{% endif %}
+  </div>
+
+  {% if metric.metric_type == "scale" %}
+  {% set span = metric.scale_max - metric.scale_min %}
+  <div class="scale-group" role="group" aria-label="{{ metric.name }} scale">
+    {% for value in range(metric.scale_min, metric.scale_max + 1) %}
+    {# --frac drives the red-to-green blend: 0 at the low end, 1 at the top #}
+    <button class="scale-btn {{ 'is-active' if entry and entry.value == value }}"
+            style="--frac: {{ '%.2f'|format((value - metric.scale_min) / span if span else 1) }}"
+            hx-post="/journal/{{ day.isoformat() }}/metric/{{ metric.id }}"
+            hx-vals='{"value": "{{ value }}"}'
+            hx-target="#metric-{{ metric.id }}" hx-swap="outerHTML"
+            aria-pressed="{{ 'true' if entry and entry.value == value else 'false' }}">
+      {{ value }}
+    </button>
+    {% endfor %}
+  </div>
+  {% else %}
+  <input class="metric-input" type="text" inputmode="decimal" name="value"
+         value="{{ '%g'|format(entry.value) if entry else '' }}"
+         hx-post="/journal/{{ day.isoformat() }}/metric/{{ metric.id }}"
+         hx-trigger="change"
+         hx-target="#metric-{{ metric.id }}" hx-swap="outerHTML"
+         aria-label="{{ metric.name }} value">
+  {% endif %}
+</li>

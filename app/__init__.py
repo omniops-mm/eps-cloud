@@ -3,15 +3,18 @@
 from flask import Flask, redirect, url_for
 from werkzeug.wrappers import Response
 
-from app import db
+from app import db, metrics
 from app.config import get_settings
+from app.logging import configure_logging
 from app.routes import health, journal
 
 
 def create_app() -> Flask:
+    configure_logging()
     app = Flask(__name__)
     app.config["SECRET_KEY"] = get_settings().secret_key
     db.init_app(app)
+    metrics.init_app(app)
     app.register_blueprint(health.bp)
     app.register_blueprint(journal.bp)
 

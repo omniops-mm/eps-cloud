@@ -60,6 +60,8 @@ class Tracker(Base):
     visible_on_days: Mapped[list[int]] = mapped_column(
         SmallIntArray, default=lambda: [0, 1, 2, 3, 4, 5, 6]
     )
+    # manual agenda position, shared numbering with tasks; NULL = default order
+    sort_order: Mapped[int | None]
     archived_at: Mapped[datetime.datetime | None]
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
@@ -97,6 +99,10 @@ class Task(Base):
     description: Mapped[str | None] = mapped_column(Text)
     deadline: Mapped[datetime.date | None]
     scheduled_for: Mapped[datetime.date | None]
+    # optional time of day; timed tasks sort chronologically with calendar events
+    scheduled_time: Mapped[datetime.time | None]
+    # manual agenda position; NULL means "use the default ordering"
+    sort_order: Mapped[int | None]
     vital: Mapped[bool] = mapped_column(default=False)
     last_user_interaction_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
     remind_after: Mapped[datetime.date | None]
@@ -207,6 +213,8 @@ class UserSettings(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
     timezone: Mapped[str] = mapped_column(Text, default="Europe/Berlin")
+    # streak forgiveness on or off; the recompute functions take it as an argument
+    grace_enabled: Mapped[bool] = mapped_column(default=True)
     calendar_fetch_time: Mapped[datetime.time] = mapped_column(default=datetime.time(6, 0))
     weather_fetch_time: Mapped[datetime.time] = mapped_column(default=datetime.time(6, 0))
     weather_location_lat: Mapped[decimal.Decimal] = mapped_column(

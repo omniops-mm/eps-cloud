@@ -1,9 +1,7 @@
-{# Needs: tracker, state, event (may be none), day. Included by journal.html
-   and returned alone by the tracker endpoint.
-
-   Same layout contract as habit_row: name stretches, meta and the due badge
-   sit in fixed slots, the button column has one width for both labels. #}
-<li class="tracker-row {{ 'is-done' if event }}" id="tracker-{{ tracker.id }}">
+{# Needs: tracker, state, event (may be none), day. Journal view of a tracker:
+   read-only. Doing a tracker happens on the dashboard agenda; this row just
+   shows how the day looked. #}
+<li class="tracker-row {{ 'is-done' if event }}">
   <span class="habit-name">{{ tracker.name }}</span>
 
   <span class="tracker-since">
@@ -19,10 +17,7 @@
     {% endif %}
   </span>
 
-  <button class="done-btn {{ 'is-active' if event }}"
-          hx-post="/journal/{{ day.isoformat() }}/tracker/{{ tracker.id }}"
-          hx-target="#tracker-{{ tracker.id }}" hx-swap="outerHTML"
-          aria-pressed="{{ 'true' if event else 'false' }}">
-    {{ "Done" if event else "Mark done" }}
-  </button>
+  <span class="tracker-status {{ 'tracker-status-done' if event }}">
+    {{ "done" if event else "not done" }}
+  </span>
 </li>

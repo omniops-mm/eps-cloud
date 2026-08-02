@@ -1,9 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Journal · {{ day.isoformat() }}{% endblock %}
 
+{% block page_class %}page-wide{% endblock %}
+
 {% block content %}
 <header class="day-plate">
-  <p class="day-plate-kicker">Daily journal</p>
+  <div class="day-plate-top">
+    <p class="day-plate-kicker">Daily journal</p>
+    <a class="tool-btn" href="/">Back to dashboard</a>
+  </div>
   <h1 class="day-plate-weekday">{{ day.strftime("%A") }}</h1>
   <p class="day-plate-date">
     {{ day.strftime("%d %B %Y") }}
@@ -14,6 +19,8 @@
   </p>
 </header>
 
+<div class="dash-grid">
+<div class="dash-main">
 <section class="card">
   <h2 class="card-title">Habits</h2>
   {% if rows %}
@@ -43,7 +50,9 @@
   <p class="empty-note">Nothing to track on this day.</p>
   {% endif %}
 </section>
+</div>
 
+<aside class="dash-side">
 <section class="card">
   <h2 class="card-title">Daily metrics</h2>
   {% if metrics %}
@@ -74,6 +83,12 @@
         {{ "Bad day" if bad_day else "Mark as a bad day" }}
       </button>
     </form>
+    <p class="badday-hint">
+      Sometimes we have bad days and it's okay.
+      Habits without an entry on a bad day don't count as missed.
+    </p>
   </div>
 </section>
+</aside>
+</div>
 {% endblock %}

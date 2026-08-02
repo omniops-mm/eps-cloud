@@ -33,7 +33,7 @@ from app.models import (
     TrackerEvent,
     TrackerState,
 )
-from app.recompute import recompute_streak_state, recompute_tracker_state
+from app.recompute import recompute_streak_state
 
 bp = Blueprint("journal", __name__, url_prefix="/journal")
 
@@ -164,45 +164,6 @@ def mark_habit(date: str, streak_id: int, mark: str) -> str:
 
     return render_template(
         "fragments/habit_row.html", streak=streak, state=state, entry=entry, day=day
-    )
-
-
-@bp.post("/<date>/tracker/<int:tracker_id>")
-def mark_tracker(date: str, tracker_id: int) -> str:
-    """Toggle "done this day" for one tracker."""
-    day = parse_date(date)
-    tracker = db_session.get(Tracker, tracker_id)
-    if tracker is None:
-        abort(404)
-
-    event = db_session.get(TrackerEvent, (day, tracker_id))
-    row_id = f"{day.isoformat()}:{tracker_id}"
-    if event is None:
-        event = TrackerEvent(date=day, tracker_id=tracker_id, activity_done=True)
-        db_session.add(event)
-        old: bool | None = None
-        new: bool | None = True
-    else:
-        db_session.delete(event)
-        old, new = event.activity_done, None
-        event = None
-
-    session = db_session()
-    maybe_audit(
-        session,
-        table="tracker_events",
-        row_id=row_id,
-        field="activity_done",
-        old=old,
-        new=new,
-        entry_date=day,
-        today=current_date(),
-    )
-    state = recompute_tracker_state(session, tracker_id, today=current_date())
-    db_session.commit()
-
-    return render_template(
-        "fragments/tracker_row.html", tracker=tracker, state=state, event=event, day=day
     )
 
 

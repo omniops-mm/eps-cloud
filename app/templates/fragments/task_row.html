@@ -1,0 +1,102 @@
+{# Needs: task, today, tomorrow, overdue_days, stale. Optional: plan (bool),
+   movable (bool). Included by agenda.html and returned alone by the task
+   endpoints.
+
+   Layout contract, shared by every day-list row type: checkbox | time slot |
+   name and tags (stretches) | status (fixed, right-aligned) | actions. #}
+{% set plan = plan|default(false) %}
+{% set movable = movable|default(false) %}
+<li class="task-row {{ 'is-done' if task.completed_at }} {{ 'is-vital' if task.vital }}"
+    id="task-{{ task.id }}">
+  <button class="task-check {{ 'is-active' if task.completed_at }}"
+          hx-post="/tasks/{{ task.id }}/toggle{{ '?plan=1' if plan }}"
+          hx-target="#task-{{ task.id }}" hx-swap="outerHTML"
+          aria-pressed="{{ 'true' if task.completed_at else 'false' }}"
+          aria-label="Mark {{ task.name }} as done">&#10003;</button>
+
+  <span class="row-time">
+    {% if task.scheduled_time %}{{ task.scheduled_time.strftime("%H:%M") }}{% endif %}
+  </span>
+
+  <span class="task-name">
+    {{ task.name }}
+    {% if task.vital %}<span class="chip chip-accent">vital</span>{% endif %}
+  </span>
+
+  <span class="task-status">
+    {% if stale %}<span class="chip chip-stale">untouched 7+ days</span>{% endif %}
+    {% if overdue_days %}
+      <span class="task-meta task-meta-danger">
+        <span class="status-long">{{ overdue_days }} {{ "day" if overdue_days == 1 else "days" }} overdue</span><span class="status-short">{{ overdue_days }}d late</span>
+      </span>
+    {% elif task.deadline %}
+      <span class="task-meta">
+        due {{ "today" if task.deadline == today
+               else ("tomorrow" if task.deadline == tomorrow
+               else task.deadline.strftime("%a %d.%m")) }}
+      </span>
+    {% elif task.scheduled_for %}
+      <span class="task-meta">
+        {{ "today" if task.scheduled_for == today
+           else "planned " + task.scheduled_for.strftime("%a %d.%m") }}
+      </span>
+    {% endif %}
+  </span>
+
+  <span class="row-actions">
+    {% if plan and movable %}
+    <span class="move-cluster">
+      {% for dir, glyph, label in [("top", "&#10514;", "Move to the top"),
+                                   ("up", "&#8593;", "Move up one"),
+                                   ("down", "&#8595;", "Move down one"),
+                                   ("bottom", "&#10515;", "Move to the bottom")] %}
+      <button class="move-btn" hx-post="/agenda/move"
+              hx-vals='{"item": "t{{ task.id }}", "dir": "{{ dir }}"}'
+              hx-target="#agenda" hx-swap="outerHTML"
+              title="{{ label }}" aria-label="{{ label }}: {{ task.name }}">{{ glyph|safe }}</button>
+      {% endfor %}
+    </span>
+    {% endif %}
+    <details class="task-menu">
+      {% if overdue_days %}
+      <summary class="menu-attention"
+               aria-label="Overdue, actions for {{ task.name }}">!</summary>
+      {% else %}
+      <summary aria-label="Actions for {{ task.name }}">&#8942;</summary>
+      {% endif %}
+      <div class="task-menu-panel">
+        <button hx-post="/tasks/{{ task.id }}/toggle{{ '?plan=1' if plan }}"
+                hx-target="#task-{{ task.id }}" hx-swap="outerHTML">
+          {{ "Not done after all" if task.completed_at else "Already done" }}
+        </button>
+        <button hx-post="/tasks/{{ task.id }}/vital{{ '?plan=1' if plan }}"
+                hx-target="#task-{{ task.id }}" hx-swap="outerHTML">
+          {{ "No longer vital" if task.vital else "Mark as vital" }}
+        </button>
+        {% if stale %}
+        <button hx-post="/tasks/{{ task.id }}/keep{{ '?plan=1' if plan }}"
+                hx-target="#task-{{ task.id }}" hx-swap="outerHTML">Keep on my list</button>
+        {% endif %}
+        <form hx-post="/tasks/{{ task.id }}/reschedule{{ '?plan=1' if plan }}"
+              hx-target="#task-{{ task.id }}" hx-swap="outerHTML">
+          <span class="menu-label">Reschedule</span>
+          <div class="menu-kind">
+            <label class="add-kind"><input type="radio" name="kind" value="planned"
+                   {{ "checked" if not task.deadline }}><span>Scheduled</span></label>
+            <label class="add-kind"><input type="radio" name="kind" value="due"
+                   {{ "checked" if task.deadline }}><span>Deadline</span></label>
+          </div>
+          <input type="date" name="date" value="{{ today.isoformat() }}">
+          <input type="time" name="time"
+                 value="{{ task.scheduled_time.strftime('%H:%M') if task.scheduled_time else '' }}">
+          <button type="submit">Save new date</button>
+        </form>
+        <button hx-post="/tasks/{{ task.id }}/archive"
+                hx-target="#task-{{ task.id }}" hx-swap="delete">Archive, keep for the records</button>
+        <button class="menu-danger" hx-post="/tasks/{{ task.id }}/delete"
+                hx-target="#task-{{ task.id }}" hx-swap="delete"
+                hx-confirm="Delete '{{ task.name }}' for good?">Delete forever</button>
+      </div>
+    </details>
+  </span>
+</li>

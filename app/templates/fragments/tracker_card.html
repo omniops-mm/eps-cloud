@@ -1,0 +1,38 @@
+{# Needs: trackers (list of snapshot rows), oob (bool). The dashboard includes
+   this normally; the tracker-toggle endpoint returns it a second time with
+   hx-swap-oob set, so htmx refreshes the card alongside the agenda swap. #}
+<section class="card" id="tracker-card" {% if oob %}hx-swap-oob="true"{% endif %}>
+  <h2 class="card-title">Trackers</h2>
+  {% if trackers %}
+  <ul class="snap-list">
+    {% for row in trackers %}
+    <li class="snap-tracker-row">
+      <span class="snap-tracker-head">
+        <span class="snap-name">{{ row.tracker.name }}</span>
+        <span class="snap-tracker-status">
+          {% if row.state and row.state.last_done_date %}
+            {% if row.overdue_by > 0 %}
+              <span class="snap-tracker-late">{{ row.overdue_by }}d overdue</span>
+            {% elif row.overdue_by == 0 %}
+              <span class="snap-tracker-late">due today</span>
+            {% else %}
+              due in {{ -row.overdue_by }}d
+            {% endif %}
+          {% else %}
+            not done yet
+          {% endif %}
+        </span>
+      </span>
+      <span class="snap-tracker-info">
+        every {{ row.tracker.threshold_days }}d
+        {% if row.state and row.state.last_done_date %}
+          &middot; last done {{ row.state.days_since_last_done }}d ago
+        {% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty-note">No trackers yet. Add one with the + button.</p>
+  {% endif %}
+</section>

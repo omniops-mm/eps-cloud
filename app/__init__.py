@@ -1,12 +1,11 @@
 """Flask app factory. gunicorn serves this via "app:create_app()"."""
 
-from flask import Flask, redirect, url_for
-from werkzeug.wrappers import Response
+from flask import Flask
 
 from app import db, metrics
 from app.config import get_settings
 from app.logging import configure_logging
-from app.routes import health, journal
+from app.routes import dashboard, health, journal
 
 
 def create_app() -> Flask:
@@ -17,10 +16,5 @@ def create_app() -> Flask:
     metrics.init_app(app)
     app.register_blueprint(health.bp)
     app.register_blueprint(journal.bp)
-
-    @app.get("/")
-    def index() -> Response:
-        # the dashboard will live here; until then the journal is the front page
-        return redirect(url_for("journal.today"))
-
+    app.register_blueprint(dashboard.bp)
     return app

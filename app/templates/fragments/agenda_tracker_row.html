@@ -1,0 +1,78 @@
+{# Needs: tracker, state, status ("due"/"soon"/"never"/"done"), overdue_by,
+   due_in, plan (bool), movable (bool). Rendered inside agenda.html only;
+   toggling re-renders the whole agenda. Same column contract as task_row. #}
+<li class="task-row tracker-agenda-row {{ 'is-done' if status == 'done' }}">
+  <button class="task-check {{ 'is-active' if status == 'done' }}"
+          hx-post="/trackers/{{ tracker.id }}/toggle{{ '?plan=1' if plan }}"
+          hx-target="#agenda" hx-swap="outerHTML"
+          aria-pressed="{{ 'true' if status == 'done' else 'false' }}"
+          aria-label="Mark {{ tracker.name }} done today">&#10003;</button>
+
+  <span class="row-time"></span>
+
+  <span class="task-name">
+    {{ tracker.name }}
+    <span class="chip chip-tracker">tracker</span>
+  </span>
+
+  <span class="task-status">
+    {% if status == "due" %}
+      {% if overdue_by|default(0) > 0 %}
+        <span class="task-meta task-meta-danger">
+          <span class="status-long">{{ overdue_by }} {{ "day" if overdue_by == 1 else "days" }} overdue</span><span class="status-short">{{ overdue_by }}d late</span>
+        </span>
+      {% else %}
+        <span class="task-meta task-meta-danger">due today</span>
+      {% endif %}
+    {% elif status == "soon" %}
+      <span class="task-meta">due in {{ due_in }}d</span>
+    {% elif status == "never" %}
+      <span class="task-meta">every {{ tracker.threshold_days }}d</span>
+    {% else %}
+      <span class="task-meta">done today</span>
+    {% endif %}
+  </span>
+
+  <span class="row-actions">
+    {% if plan and movable %}
+    <span class="move-cluster">
+      {% for dir, glyph, label in [("top", "&#10514;", "Move to the top"),
+                                   ("up", "&#8593;", "Move up one"),
+                                   ("down", "&#8595;", "Move down one"),
+                                   ("bottom", "&#10515;", "Move to the bottom")] %}
+      <button class="move-btn" hx-post="/agenda/move"
+              hx-vals='{"item": "k{{ tracker.id }}", "dir": "{{ dir }}"}'
+              hx-target="#agenda" hx-swap="outerHTML"
+              title="{{ label }}" aria-label="{{ label }}: {{ tracker.name }}">{{ glyph|safe }}</button>
+      {% endfor %}
+    </span>
+    {% endif %}
+    <details class="task-menu">
+      <summary aria-label="Actions for {{ tracker.name }}">&#8942;</summary>
+      <div class="task-menu-panel">
+        <form hx-post="/trackers/{{ tracker.id }}/edit{{ '?plan=1' if plan }}"
+              hx-target="#agenda" hx-swap="outerHTML">
+          <span class="menu-label">Adjust</span>
+          <label class="add-inline">Due again
+            <input class="add-days" type="number" name="threshold_days"
+                   value="{{ tracker.threshold_days }}" min="1" required>
+            days after last done
+          </label>
+          <div class="weekday-pills">
+            {% for label in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] %}
+            <label class="weekday-pill">
+              <input type="checkbox" name="visible_on_days" value="{{ loop.index0 }}"
+                     {{ "checked" if loop.index0 in tracker.visible_on_days }}>
+              <span>{{ label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+          <button type="submit">Save changes</button>
+        </form>
+        <button class="menu-danger" hx-post="/trackers/{{ tracker.id }}/delete"
+                hx-target="#agenda" hx-swap="outerHTML"
+                hx-confirm="Delete '{{ tracker.name }}' and its whole history?">Delete forever</button>
+      </div>
+    </details>
+  </span>
+</li>

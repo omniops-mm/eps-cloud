@@ -1,0 +1,80 @@
+{# Needs: agenda (dict of overdue/day/finished/upcoming), today, plan (bool).
+   The whole card re-renders as one unit: ordering moves and tracker toggles
+   change several rows at once, so swapping rows one by one would leave stale
+   neighbours. #}
+<section class="card" id="agenda">
+  <div class="agenda-head">
+    <h2 class="card-title">Agenda</h2>
+    <span class="agenda-tools">
+      {% if plan %}
+      <button class="tool-btn" hx-post="/agenda/reset"
+              hx-target="#agenda" hx-swap="outerHTML">Reset order</button>
+      <a class="tool-btn tool-btn-active" href="/">Done planning</a>
+      {% else %}
+      <a class="tool-btn" href="/?plan=1">Plan the day</a>
+      {% endif %}
+    </span>
+  </div>
+
+  {% if agenda.overdue %}
+  <div class="agenda-block-overdue">
+    <ul class="row-list">
+      {% for row in agenda.overdue %}
+        {% with task = row.task, tomorrow = row.tomorrow, overdue_days = row.overdue_days,
+                stale = row.stale, plan = plan, movable = false %}
+          {% include "fragments/task_row.html" %}
+        {% endwith %}
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if agenda.day or agenda.finished %}
+  <ul class="row-list">
+    {% for row in agenda.day %}
+      {% if row.kind == "event" %}
+      <li class="task-row event-row">
+        <span class="event-mark" title="From your calendar, not checkable here">&#8211;</span>
+        <span class="row-time">{{ row.event.start_at.strftime("%H:%M") }}</span>
+        <span class="task-name">{{ row.event.title }}</span>
+        <span class="task-status"><span class="task-meta">calendar</span></span>
+        <span class="row-actions"></span>
+      </li>
+      {% elif row.kind == "task" %}
+        {% with task = row.task, tomorrow = row.tomorrow, overdue_days = row.overdue_days,
+                stale = row.stale, plan = plan, movable = true %}
+          {% include "fragments/task_row.html" %}
+        {% endwith %}
+      {% else %}
+        {% with tracker = row.tracker, state = row.state, status = row.status,
+                overdue_by = row.overdue_by|default(0), due_in = row.due_in|default(0),
+                plan = plan, movable = true %}
+          {% include "fragments/agenda_tracker_row.html" %}
+        {% endwith %}
+      {% endif %}
+    {% endfor %}
+    {% for row in agenda.finished %}
+      {% with task = row.task, tomorrow = row.tomorrow, overdue_days = row.overdue_days,
+              stale = row.stale, plan = plan, movable = false %}
+        {% include "fragments/task_row.html" %}
+      {% endwith %}
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if not agenda.overdue and not agenda.day and not agenda.finished %}
+  <p class="empty-note">Nothing on today's agenda. Add a task or enjoy it.</p>
+  {% endif %}
+
+  {% for group in agenda.upcoming %}
+  <h3 class="agenda-day-label">{{ group.label }}</h3>
+  <ul class="row-list">
+    {% for row in group.rows %}
+      {% with task = row.task, tomorrow = row.tomorrow, overdue_days = row.overdue_days,
+              stale = row.stale, plan = plan, movable = false %}
+        {% include "fragments/task_row.html" %}
+      {% endwith %}
+    {% endfor %}
+  </ul>
+  {% endfor %}
+</section>

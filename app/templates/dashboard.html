@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}EPS · {{ today.isoformat() }}{% endblock %}
+{% block page_class %}page-wide{% endblock %}
+
+{% block content %}
+<header class="day-plate">
+  <div class="day-plate-top">
+    <div>
+      <p class="day-plate-kicker">Dashboard</p>
+      <h1 class="day-plate-weekday">{{ today.strftime("%A") }}</h1>
+      <p class="day-plate-date">{{ today.strftime("%d %B %Y") }}</p>
+      {% if weather %}
+      <p class="weather-line">
+        {{ weather.temp_min }}&deg;C to {{ weather.temp_max }}&deg;C
+        {% if weather.rain_chance >= 20 %}
+          &middot; {{ weather.rain_chance }}% chance of rain
+        {% endif %}
+      </p>
+      {% endif %}
+    </div>
+    <details class="add-panel">
+      <summary class="add-btn" title="Add a task, habit, tracker or metric">+ Add</summary>
+      <div class="add-panel-body">
+        {# radio tabs; CSS shows only the form matching the checked tab #}
+        <div class="add-tabs">
+          <label><input type="radio" name="add-type" value="task" checked><span>Task</span></label>
+          <label><input type="radio" name="add-type" value="streak"><span>Habit</span></label>
+          <label><input type="radio" name="add-type" value="tracker"><span>Tracker</span></label>
+          <label><input type="radio" name="add-type" value="metric"><span>Metric</span></label>
+        </div>
+
+        <form class="add-form add-form-task" method="post" action="/tasks/add">
+          <input type="text" name="name" placeholder="What needs doing?" required>
+          <div class="add-row">
+            <label class="add-kind"><input type="radio" name="kind" value="planned" checked><span>Scheduled</span></label>
+            <label class="add-kind"><input type="radio" name="kind" value="due"><span>Deadline</span></label>
+          </div>
+          <div class="add-row">
+            <input type="date" name="date" value="{{ today.isoformat() }}" required>
+            <input type="time" name="time" title="Optional time of day">
+          </div>
+          <div class="add-row">
+            <label class="add-check"><input type="checkbox" name="vital"><span>Vital</span></label>
+            <button type="submit">Add task</button>
+          </div>
+        </form>
+
+        <form class="add-form add-form-streak" method="post" action="/add/streak">
+          <input type="text" name="name" placeholder="Habit to keep, e.g. no sugar" required>
+          <input type="text" name="description" placeholder="Description (optional)">
+          <div class="add-row"><button type="submit">Add habit</button></div>
+        </form>
+
+        <form class="add-form add-form-tracker" method="post" action="/add/tracker">
+          <input type="text" name="name" placeholder="Activity, e.g. water the plants" required>
+          <div class="add-row">
+            <label class="add-inline">Due again
+              <input class="add-days" type="number" name="threshold_days" value="3" min="1" required>
+              days after last done
+            </label>
+          </div>
+          <p class="add-hint">Counts the days since you last did it and turns red past the limit.</p>
+          <div class="weekday-pills">
+            {% for label in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] %}
+            <label class="weekday-pill">
+              <input type="checkbox" name="visible_on_days" value="{{ loop.index0 }}" checked>
+              <span>{{ label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+          <div class="add-row"><button type="submit">Add tracker</button></div>
+        </form>
+
+        <form class="add-form add-form-metric" method="post" action="/add/metric">
+          <input type="text" name="name" placeholder="Metric, e.g. sleep" required>
+          <div class="add-row">
+            <label class="add-kind"><input type="radio" name="metric_type" value="scale" checked><span>1-5 scale</span></label>
+            <label class="add-kind"><input type="radio" name="metric_type" value="numeric"><span>Number</span></label>
+            <input class="add-unit" type="text" name="unit" placeholder="unit, e.g. hours">
+          </div>
+          <div class="add-row"><button type="submit">Add metric</button></div>
+        </form>
+      </div>
+    </details>
+  </div>
+</header>
+
+<div class="dash-grid">
+  <div class="dash-main">
+    {% with agenda = agenda, today = today, plan = plan %}
+      {% include "fragments/agenda.html" %}
+    {% endwith %}
+  </div>
+
+  <aside class="dash-side">
+    <section class="card">
+      <h2 class="card-title">Streaks</h2>
+      <ul class="snap-list">
+        {% for row in snap.streaks %}
+        <li class="snap-row">
+          <span class="snap-name">{{ row.streak.name }}</span>
+          {% if not row.logged %}
+          <span class="snap-ring" title="No entry yet today"></span>
+          {% endif %}
+          <span class="snap-slot">
+            {% if row.state and row.state.current_streak >= 7
+                  and row.state.current_streak == row.state.personal_record %}
+              <span class="chip chip-accent">record</span>
+            {% endif %}
+          </span>
+          <span class="snap-value">
+            {% if row.state %}{{ row.state.current_streak }}
+              <span class="snap-unit">{{ "day" if row.state.current_streak == 1 else "days" }}</span>
+            {% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    {% with trackers = snap.trackers, oob = false %}
+      {% include "fragments/tracker_card.html" %}
+    {% endwith %}
+
+    {% if snap.metrics %}
+    <section class="card">
+      <h2 class="card-title">Latest metrics</h2>
+      <ul class="snap-list">
+        {% for row in snap.metrics %}
+        <li class="snap-row">
+          <span class="snap-name">{{ row.metric.name }}</span>
+          <span class="snap-value">
+            {% if row.metric.metric_type == "scale" %}
+              {{ "%g"|format(row.latest.value) if row.latest else "-" }}
+              <span class="snap-unit">/ {{ row.metric.scale_max }}</span>
+            {% elif row.latest %}
+              {{ "%g"|format(row.latest.value) }}{{ " " + row.metric.unit if row.metric.unit else "" }}
+            {% else %}
+              <span class="task-meta">nothing yet</span>
+            {% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    <a class="journal-btn" href="/journal/">Open daily journal</a>
+  </aside>
+</div>
+{% endblock %}

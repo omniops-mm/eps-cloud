@@ -1,3 +1,10 @@
+# Shared by every service that talks to the database. Defined once so the
+# connection string cannot drift between them.
+x-app-env: &app-env
+  DATABASE_URL: postgresql+psycopg://eps:${POSTGRES_PASSWORD}@db:5432/eps
+  SECRET_KEY: ${SECRET_KEY}
+  TZ: ${TZ:-Europe/Berlin}
+
 services:
   db:
     image: postgres:16-alpine
@@ -13,21 +20,31 @@ services:
       timeout: 3s
       retries: 10
     ports:
+      # loopback-only, dev convenience: lets host-side alembic reach the db
       - "127.0.0.1:5432:5432"
-          # loopback-only, dev convenience: lets host-side alembic reach the db
 
-          
+  # Brings the schema up to date, then exits. Everything else waits for it.
+  # Deliberately its own service rather than part of the web startup: exactly one
+  # process should own the schema no matter how many web replicas run.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    command: ["alembic", "upgrade", "head"]
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+
   web:
     build:
       context: .
       dockerfile: Dockerfile.web
-    environment:
-      DATABASE_URL: postgresql+psycopg://eps:${POSTGRES_PASSWORD}@db:5432/eps
-      SECRET_KEY: ${SECRET_KEY}
-      TZ: ${TZ:-Europe/Berlin}
+    environment: *app-env
+    # Waiting on migrate also waits on the database, since migrate itself does.
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
       interval: 10s
@@ -39,9 +56,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+    environment: *app-env
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   nginx:
     build:

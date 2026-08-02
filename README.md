@@ -93,6 +93,8 @@ EPS runs as four containers, each with one job.
 
 All four sit on a private network, and the only published port is nginx's. The why behind these picks, Flask over FastAPI, HTMX over a separate frontend, four containers rather than one or fifteen, lives in [the decisions notebook](docs/decisions.md).
 
+There is a fifth service, `migrate`, but it is not a fifth container in any lasting sense: it applies the Alembic migrations, exits, and reuses the web image rather than adding another one to build. Web and worker are not allowed to start until it has exited successfully. Schema changes get their own short-lived process because exactly one thing should apply them no matter how many web replicas are running, and because a migration that fails should leave you with a stack that refuses to start rather than one that comes up and serves errors against a half-built schema.
+
 <div align="right"><a href="#top">back to top</a></div>
 
 ---
@@ -177,7 +179,7 @@ Single-user throughout. Multi-user is not a v1 concern and the settings table ha
 
 ## Running it
 
-**This does not work yet.** v0.1 is being built. When it lands, the whole procedure is meant to be this, and if it is not then v0.1 is not done:
+v0.1 is still being built, but this procedure works today:
 
 ```bash
 git clone https://github.com/omniops-mm/eps-cloud.git
@@ -186,7 +188,7 @@ cp .env.example .env      # then fill in the values it asks for
 docker compose up
 ```
 
-That is the v0.1 done-line, stated as user documentation on purpose so there is no room to move the goalposts later. Google Calendar OAuth may slip to v0.1.1, in which case the app comes up fine without it and shows the integration as not configured.
+That is the v0.1 done-line, stated as user documentation on purpose so there is no room to move the goalposts later. The first run builds the images, creates the schema and serves the dashboard. You start with an empty system, so the habits, trackers and tasks are yours to add from there. Google Calendar OAuth may slip to v0.1.1, in which case the app comes up fine without it and shows the integration as not configured.
 
 <div align="right"><a href="#top">back to top</a></div>
 

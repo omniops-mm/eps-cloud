@@ -326,29 +326,6 @@ button {
   color: var(--ok);
 }
 
-.done-btn {
-  padding: 0.4rem 0;
-  width: 7rem;
-  text-align: center;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border-strong);
-  background: var(--surface-raised);
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.done-btn:hover {
-  border-color: var(--ok);
-  color: var(--ok);
-}
-
-.done-btn.is-active {
-  background: var(--ok-soft);
-  border-color: var(--ok);
-  color: var(--ok);
-}
-
 /* ---------- metric rows ---------- */
 
 .scale-group {
@@ -655,11 +632,6 @@ button {
   color: var(--accent);
 }
 
-.chip-danger-strong {
-  background: var(--danger);
-  color: #fff;
-}
-
 .agenda-head {
   display: flex;
   justify-content: space-between;
@@ -709,12 +681,6 @@ button {
 /* events have no menu; reserving its width keeps their status text in line */
 .event-row .row-actions {
   width: 1.6rem;
-}
-
-.agenda-flex-divider {
-  border-top: 1px solid var(--border);
-  margin-top: 0.4rem;
-  padding-top: 0.4rem;
 }
 
 .agenda-day-label {
@@ -936,34 +902,7 @@ button {
   padding: 0.45rem 0;
 }
 
-.snap-tracker-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.6rem;
-}
-
-.snap-tracker-status {
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  white-space: nowrap;
-}
-
-.snap-tracker-row + .snap-tracker-row {
-  border-top: 1px solid var(--border);
-}
-
-.snap-tracker-info {
-  color: var(--text-muted);
-  font-size: 0.8rem;
-}
-
-.snap-tracker-late {
-  color: var(--danger);
-  font-weight: 600;
-}
-
-.snap-row {
+.snap-row + .snap-row {
   border-top: 1px solid var(--border);
 }
 
@@ -999,30 +938,6 @@ button {
   border-radius: 50%;
   border: 2px solid var(--accent);
   opacity: 0.6;
-}
-
-.snap-danger {
-  color: var(--danger);
-}
-
-.snap-soon {
-  color: var(--text-muted);
-  font-weight: 400;
-  font-size: 0.85rem;
-}
-
-/* hollow ring = no entry yet today; fills green once logged */
-.snap-dot {
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 50%;
-  border: 2px solid var(--text-muted);
-  flex-shrink: 0;
-}
-
-.snap-dot.is-logged {
-  border-color: var(--ok);
-  background: var(--ok);
 }
 
 /* ---------- add panel ---------- */

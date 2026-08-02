@@ -88,7 +88,7 @@ EPS runs as four containers, each with one job.
 
 - **nginx** is the front door and the only container reachable from the outside. It holds the TLS certificates, serves the static files, and passes everything else inward.
 - **web** is the application itself: Flask running under gunicorn, with every page rendered on the server through Jinja2 templates. The interactive touches come from HTMX, so there is no separate frontend application to maintain.
-- **worker** runs the scheduled jobs (calendar fetch, weather fetch, stale-task flagging, audit cleanup, token refresh) in its own process on APScheduler. Nothing connects to it; it only reaches out.
+- **worker** is where the scheduled jobs will run (calendar fetch, weather fetch, stale-task flagging, audit cleanup, token refresh), in its own process rather than inside a web request. Nothing connects to it; it only reaches out. Today it is a heartbeat process, the jobs land later in v0.1.
 - **Postgres** holds the data, accessed through SQLAlchemy, with every schema change applied as a versioned Alembic migration. Its files live on a named volume, so the data outlives the container.
 
 All four sit on a private network, and the only published port is nginx's. The why behind these picks, Flask over FastAPI, HTMX over a separate frontend, four containers rather than one or fifteen, lives in [the decisions notebook](docs/decisions.md).
@@ -194,7 +194,7 @@ That is the v0.1 done-line, stated as user documentation on purpose so there is 
 
 ## Continuous integration
 
-Every push and every pull request runs the same pipeline. A red build blocks the merge.
+Every push and every pull request runs linting (ruff), type checking (mypy) and the test suite. A red build blocks the merge. The image build, the Trivy scan and the push to the registry are the next things to land in this pipeline; the diagram below shows the finished shape.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/ci-dark.svg">

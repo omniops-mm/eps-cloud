@@ -95,6 +95,7 @@
   <aside class="dash-side">
     <section class="card">
       <h2 class="card-title">Streaks</h2>
+      {% if snap.streaks %}
       <ul class="snap-list">
         {% for row in snap.streaks %}
         <li class="snap-row">
@@ -116,6 +117,9 @@
         </li>
         {% endfor %}
       </ul>
+      {% else %}
+      <p class="empty-note">No habits yet. Add one with the + Add button.</p>
+      {% endif %}
     </section>
 
     {% with trackers = snap.trackers, oob = false %}

@@ -48,6 +48,13 @@ def utc_now() -> datetime.datetime:
     return datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
 
 
+def local_day_start_utc(day: datetime.date) -> datetime.datetime:
+    """Local midnight of a day, expressed in naive UTC for column comparisons."""
+    zone = zoneinfo.ZoneInfo(get_settings().tz)
+    midnight = datetime.datetime.combine(day, datetime.time.min, tzinfo=zone)
+    return midnight.astimezone(datetime.UTC).replace(tzinfo=None)
+
+
 def parse_date(value: str) -> datetime.date:
     try:
         return datetime.date.fromisoformat(value)

@@ -40,7 +40,7 @@ from app.models import (
     TrackerState,
 )
 from app.recompute import recompute_tracker_state
-from app.routes.journal import current_date, utc_now
+from app.routes.journal import current_date, local_day_start_utc, utc_now
 
 bp = Blueprint("dashboard", __name__)
 
@@ -184,7 +184,7 @@ def build_agenda(today: datetime.date) -> dict:
             select(Task).where(
                 Task.archived_at.is_(None),
                 Task.completed_at.isnot(None),
-                Task.completed_at >= datetime.datetime.combine(today, datetime.time.min),
+                Task.completed_at >= local_day_start_utc(today),
             )
         )
     ]
@@ -518,8 +518,8 @@ def move_item() -> str:
             new_key = ordered[-1] + KEY_GAP
         else:
             new_key = (ordered[index + 1] + ordered[index + 2]) // 2
-    # ponytail: repeated midpoints can exhaust the gap between two keys; if
-    # that ever bites, Reset order clears the manual keys and heals the scale
+    # repeated midpoints can exhaust the gap between two keys; if that ever
+    # bites, Reset order clears the manual keys and heals the scale
 
     row = rows[index]
     if row["kind"] == "task":
@@ -558,13 +558,15 @@ def add_tracker() -> Response:
     if not name or not threshold_raw.isdigit() or int(threshold_raw) < 1:
         abort(400)
     days = [int(d) for d in request.form.getlist("visible_on_days")]
-    db_session.add(
-        Tracker(
-            name=name,
-            threshold_days=int(threshold_raw),
-            visible_on_days=sorted(days) if days else [0, 1, 2, 3, 4, 5, 6],
-        )
+    tracker = Tracker(
+        name=name,
+        threshold_days=int(threshold_raw),
+        visible_on_days=sorted(days) if days else [0, 1, 2, 3, 4, 5, 6],
     )
+    db_session.add(tracker)
+    db_session.flush()
+    # without its state row the tracker would never reach the agenda
+    recompute_tracker_state(db_session(), tracker.id, today=current_date())
     db_session.commit()
     return redirect(url_for("dashboard.index"))
 

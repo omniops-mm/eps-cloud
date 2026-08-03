@@ -1,5 +1,8 @@
-# pinned minor version: rebuild next month produces the same nginx
-FROM nginx:1.27-alpine
+# Pinned to a minor version, so a rebuild next month produces the same nginx.
+# The pin still has to move when the base stops receiving fixes: 1.27-alpine
+# sat on an Alpine whose OpenSSL had a fixed CVE outstanding, and the image scan
+# in CI is what surfaces that. Bumping the base is the fix, not suppressing it.
+FROM nginx:1.30-alpine
 
 COPY nginx.conf /etc/nginx/nginx.conf
 

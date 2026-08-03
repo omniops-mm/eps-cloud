@@ -9,7 +9,9 @@
 
 Python, Flask, HTMX, Postgres, Docker Compose, and, one version at a time, Ansible, Kubernetes, Terraform and AWS.
 
-> **Status: v0.1 in progress.** The design is finished and locked. The build started in July 2026 and the first tagged version is not out yet. This README describes what EPS is and where it is going, and it marks clearly what exists today versus what is scheduled.
+> **Status: v0.1, nearly at the tag.** The application is built and running: the dashboard, the journal, the calendar, settings, the background worker and the CI pipeline all exist. Google Calendar sync moved to v0.1.1. Anything else described here that does not exist yet is marked where it comes up.
+
+<img alt="The dashboard: an agenda with an overdue block on top, then the day's events, tasks and trackers in one ordered list, with streaks, tracker schedules and latest metrics in a side column." src="docs/img/dashboard.png">
 
 ### Quick links
 
@@ -42,36 +44,29 @@ One honest note about what this repository is. It is a learning project more tha
 
 ## What it does
 
-Everything below is single-user. The UI is server-rendered, so there is no separate frontend application.
+Everything below is single-user and server-rendered, and everything shown here exists and runs today. Three pages do almost all the work.
 
-**Streaks** are for forming good habits or minimising bad ones. You define something you want to keep up, like sleeping on time or practising a skill or drinking less coffee, and try to hold the streak. There is a grace mechanic: reach 7 days and you earn one free miss, which replenishes after another 7 days. That exists for things like staying under a calorie target, where you might splurge occasionally without wanting to wipe out a month of progress. It can be turned off.
+**The dashboard is where a day happens.** One list, in order: anything overdue pinned to the top, then the day itself. Calendar events, tasks with a time on them, vital tasks, ordinary tasks and any tracker that has come due all sit on that one list, in one order, with what you finished sinking to the bottom crossed out. The next few days wait in their own groups underneath. A "Plan the day" mode adds move buttons so you can put the list in the order you actually intend to do it, and overdue items stay pinned regardless, because reordering your way out of a missed deadline is not planning. A task you have not touched in over a week gets flagged and asks whether you still mean to do it. That question is what stops the list silently clogging up. Anything new goes in through the Add panel at the top: a task, a habit, a tracker or a metric, one panel, no admin pages to visit first. That is the page in the screenshot above.
 
-**Trackers** are days-since-last-done counters for recurring things. Doing the dishes, grocery shopping, working out. You set a threshold and the tracker stays quiet until that many days have passed, at which point it surfaces on your list. Trackers can also be pinned to specific weekdays, so a weekly report only appears on Fridays.
+**The journal is where a day gets written down.** Habits marked kept or missed, trackers ticked off, the day's numbers entered on scale buttons or plain fields, and a freeform note that saves as you type. Nothing parses the note; it is for your future self. There is also a bad-day switch: mark a day bad and the habit boxes you did not tick stop counting as misses. Rough days happen, and losing a five-week streak to one of them teaches you nothing except to stop using the app.
 
-**Tasks** are the main gimmick. Unlike an ordinary to-do list, every task carries date information. A deadline, meaning when it must be done by. A scheduled date, for something you intend to do on a particular day. Or a remind-after date, which keeps the task hidden until then. Quick-add defaults the date to today. Recurring things are not tasks, they are trackers, so tasks are one-shot: you do them, mark them done, and they are gone.
+<img alt="The journal for one day: habit rows with pass and fail marks, trackers, daily metrics with scale buttons, and a notes box with a bad-day toggle." src="docs/img/journal.png">
 
-Tasks route into one of two dashboard sections. Priorities pulls in anything vital, due today or tomorrow, or already overdue. Scheduled pulls in what you planned for today plus deadlines three to five days out. Overdue tasks get a maintenance menu inline where they appear, so you never have to dig into a settings page to resolve them. Anything untouched for over a week resurfaces and asks whether you still intend to do it, which is what stops the list silently clogging up.
+**The calendar reaches every other day.** A month grid where each day carries small marks, habits kept or missed, a note written, a day marked bad, and any day opens as it looked at the time. Past days also list the tasks that belonged to them, finished or not. Everything on a past day is editable, so a habit you forgot to tick three weeks ago is a two-click fix, every such edit lands in an audit log, and the streak numbers recompute on their own.
 
-<details>
-<summary>The rest of the components</summary>
+<img alt="A month grid. Each day cell shows a green or red dot for habits and a grey dot for notes, bad days are tinted red, and today is outlined." src="docs/img/calendar.png">
 
-<br>
+The things those pages work with:
 
-**Daily metrics** are user-defined per-day numbers in two shapes: a 1 to 5 scale for subjective ratings, or a plain number with an optional unit. Rather than hardcoding sleep and weight and mood, the app lets you define whichever ones you care about.
+**Streaks** are for forming good habits or minimising bad ones. Something you want to keep up, like sleeping on time or practising a skill or drinking less coffee, held day by day. Reach 7 days and you earn one free miss, which replenishes after another 7. That grace exists for things like staying under a calorie target, where the occasional splurge should not wipe out a month of progress. It can be turned off.
 
-**Daily state** holds per-day flags. Right now there is one, `bad_day`. Marking a day bad means the habit boxes you did not tick stop counting as failures, which protects streaks through rough patches without making you backfill anything.
+**Trackers** are days-since-last-done counters for recurring chores. Doing the dishes, grocery shopping, watering the plants. You set a threshold and the tracker stays quiet until that many days have passed, then surfaces on the dashboard like a task. Trackers can be pinned to weekdays, so a weekly errand only appears on Fridays.
 
-**Daily notes** are a freeform text field per day. Nothing parses it. It is a journal for your future self.
+**Tasks** carry dates, and that is the point of them. A deadline it must be done by, a scheduled date you intend to do it on, or a remind-after date that keeps it hidden until relevant. The dashboard sorts the day out of those dates, which is the maintenance work this app exists to take off you. Tasks are one-shot: recurring things are trackers, not tasks on repeat.
 
-**Calendar integration** pulls the coming week from Google Calendar, cached daily, read-only. The app never writes to your calendar. Events appear in the Scheduled section with a marker.
+**Daily metrics** are per-day numbers you define yourself, either a 1 to 5 scale for subjective ratings or a plain number with a unit. Sleep, mood, weight, whatever you care about, rather than a hardcoded list.
 
-**Weather integration** pulls a daily forecast from BrightSky, which is free, unauthenticated and built on DWD data. A small rule-based engine turns the raw numbers into one practical line: rain probability over 50% suggests an umbrella, over 25°C suggests staying hydrated, and so on. The rules are plain code. There is no AI generating prose here.
-
-**Settings** is a single-row table of global preferences: timezone, the fetch times for calendar and weather, and the coordinates used for the forecast.
-
-**The audit log** records every change to event-shaped data: the timestamp, the table, the row, the field, the old value and the new one. Retention is 180 days with a nightly cleanup. Journal text is exempt, being high-churn and low value for debugging. v0.1 does not surface it in the UI. It is there for debugging now and as the foundation for an edit-history feature later.
-
-</details>
+Around the edges: the dashboard shows today's temperature range and rain chance, fetched from [BrightSky](https://brightsky.dev/), which is free and needs no key; a background worker warms the week's forecast each morning and clears audit-log entries older than 180 days each night. A settings page manages the streak grace toggle, the forecast location, the fetch times and the timezone. The timezone decides which calendar day an entry belongs to, so it is read once at startup and a change applies on the next restart, which the page says out loud. Calendar events already render on the dashboard and the day views, but the Google Calendar sync that would feed them real events is v0.1.1 work; until then the seed script provides example ones.
 
 <div align="right"><a href="#top">back to top</a></div>
 
@@ -86,9 +81,9 @@ EPS runs as four containers, each with one job.
   <img alt="A browser reaches nginx over port 443. nginx is the only container published outside the private network and proxies to the web container on port 8000. A separate worker container takes no inbound traffic. Both web and worker talk to Postgres." src="docs/img/topology-light.svg">
 </picture>
 
-- **nginx** is the front door and the only container reachable from the outside. It holds the TLS certificates, serves the static files, and passes everything else inward.
+- **nginx** is the front door and the only container reachable from the outside. It serves the static files and passes everything else inward. TLS arrives in v0.2, together with the first deployment that has a public address worth encrypting.
 - **web** is the application itself: Flask running under gunicorn, with every page rendered on the server through Jinja2 templates. The interactive touches come from HTMX, so there is no separate frontend application to maintain.
-- **worker** is where the scheduled jobs will run (calendar fetch, weather fetch, stale-task flagging, audit cleanup, token refresh), in its own process rather than inside a web request. Nothing connects to it; it only reaches out. Today it is a heartbeat process, the jobs land later in v0.1.
+- **worker** runs the scheduled jobs in its own process rather than inside a web request: the morning weather prefetch and the nightly audit-log cleanup, with the calendar fetch joining them in v0.1.1. Each job can also be invoked once by name from the command line. Nothing connects to the worker; it only reaches out.
 - **Postgres** holds the data, accessed through SQLAlchemy, with every schema change applied as a versioned Alembic migration. Its files live on a named volume, so the data outlives the container.
 
 All four sit on a private network, and the only published port is nginx's. The why behind these picks, Flask over FastAPI, HTMX over a separate frontend, four containers rather than one or fifteen, lives in [the decisions notebook](docs/decisions.md).
@@ -179,8 +174,6 @@ Single-user throughout. Multi-user is not a v1 concern and the settings table ha
 
 ## Running it
 
-v0.1 is still being built, but this procedure works today:
-
 ```bash
 git clone https://github.com/omniops-mm/eps-cloud.git
 cd eps-cloud
@@ -188,7 +181,13 @@ cp .env.example .env      # then fill in the values it asks for
 docker compose up
 ```
 
-That is the v0.1 done-line, stated as user documentation on purpose so there is no room to move the goalposts later. The first run builds the images, creates the schema and serves the dashboard. You start with an empty system, so the habits, trackers and tasks are yours to add from there. Google Calendar OAuth may slip to v0.1.1, in which case the app comes up fine without it and shows the integration as not configured.
+That is the v0.1 done-line, stated as user documentation on purpose so there is no room to move the goalposts later. The first run builds the images, applies the migrations and serves the dashboard on port 80. You start with an empty system. If you would rather look around a lived-in one first:
+
+```bash
+docker compose run --rm web python seed.py
+```
+
+That fills the database with a couple of months of example history, safe to run repeatedly and safe to delete from. Google Calendar OAuth is v0.1.1; the app runs fine without it.
 
 <div align="right"><a href="#top">back to top</a></div>
 
@@ -196,12 +195,14 @@ That is the v0.1 done-line, stated as user documentation on purpose so there is 
 
 ## Continuous integration
 
-Every push and every pull request runs linting (ruff), type checking (mypy) and the test suite. A red build blocks the merge. The image build, the Trivy scan and the push to the registry are the next things to land in this pipeline; the diagram below shows the finished shape.
+Every push and every pull request runs linting (ruff), type checking (mypy) and the test suite. A fourth job starts a real Postgres and walks every migration up, checks that the models and the migrations still describe the same schema, then walks every migration back down, because a downgrade nobody has ever run is a downgrade that does not work, and the moment you find that out is the worst one available.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/ci-dark.svg">
-  <img alt="On every push: lint with ruff and mypy, run the pytest suite, build the four images and scan them with Trivy, then publish to GHCR tagged by commit SHA." src="docs/img/ci-light.svg">
+  <img alt="On every push: lint with ruff and mypy, run the pytest suite and the migrations against a real Postgres, build the three images and scan them with Trivy, then publish to GHCR tagged by commit SHA." src="docs/img/ci-light.svg">
 </picture>
+
+Only when all of that is green do the images get built, and the order within that job matters: each image is built into the runner, scanned by Trivy, and published only after the scan. Building, pushing and then scanning would mean a vulnerable image is already public while the scanner is still reading it. The full findings land in the repository's Security tab at every severity; the build itself fails only on critical vulnerabilities that already have a fix, since an unfixable problem in a base image should not block unrelated work. Pushes to master publish to GHCR.
 
 Two details worth pointing out. Images are tagged by commit SHA rather than `latest`, so any running container can be traced back to the exact source that produced it. And dependencies are locked, not floated, so a build in November installs exactly what a build in July installed. A vulnerability scan only means something when you know precisely what is inside the image.
 
@@ -215,10 +216,11 @@ One application, deployed progressively more seriously. The directories below ar
 
 ```
 app/          the Flask application: routes, templates, models, recompute
-worker/       the scheduler and its five jobs
+worker/       the scheduler and its jobs
 alembic/      migrations, from the first commit
 tests/        pytest suite
 docs/         decisions, diagrams
+seed.py       example data for a fresh install
 compose.yml   v0.1 lives here
 deploy/       ansible (v0.2), helm (v0.3), terraform (v1.0), added as they arrive
 ```

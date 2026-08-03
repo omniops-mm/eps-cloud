@@ -15,6 +15,8 @@ COPY --from=builder /app/.venv /app/.venv
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
+# so a fresh install can populate example data without a dev checkout
+COPY seed.py ./seed.py
 ENV PATH="/app/.venv/bin:$PATH"
 USER eps
 EXPOSE 8000

@@ -4,6 +4,15 @@ on:
   push:
   pull_request:
 
+# a newer push to the same branch makes the run in progress pointless
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# read-only by default; the jobs that need more ask for it themselves
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -30,3 +39,116 @@ jobs:
       - run: uv sync --locked
       # the suite builds its own in-memory database, so no services are needed
       - run: uv run pytest -q
+
+  migrations:
+    # the test suite runs on SQLite, so nothing else proves the migrations work
+    # on the database this actually ships with
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: eps
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: eps
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eps -d eps"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # an address, not a name: "localhost" can resolve to IPv6 first and the
+      # service only listens on IPv4, which costs a connect timeout per command
+      DATABASE_URL: postgresql+psycopg://eps:ci-only-password@127.0.0.1:5432/eps
+      SECRET_KEY: ci-only-not-a-real-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --locked
+      - name: Apply every migration to an empty database
+        run: uv run alembic upgrade head
+      - name: Models and migrations agree
+        run: uv run alembic check
+      - name: Every migration can be undone
+        # a downgrade nobody runs is a downgrade that does not work
+        run: uv run alembic downgrade base
+      - name: Seed a fresh database
+        run: |
+          uv run alembic upgrade head
+          uv run python seed.py
+
+  images:
+    needs: [lint, types, tests, migrations]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    strategy:
+      # one image failing should not hide the state of the other two
+      fail-fast: false
+      matrix:
+        # migrate reuses the web image, so there are three to build, not four
+        image: [web, worker, nginx]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build into the runner, not the registry
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.${{ matrix.image }}
+          load: true
+          tags: eps-${{ matrix.image }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      - name: Scan for known vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: eps-${{ matrix.image }}:${{ github.sha }}
+          format: sarif
+          output: trivy-${{ matrix.image }}.sarif
+          # reports everything and never fails; the gate below is what blocks
+          exit-code: "0"
+
+      - name: Send findings to the Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        # upload even when a later step fails, or a bad image reports nothing
+        if: always()
+        with:
+          sarif_file: trivy-${{ matrix.image }}.sarif
+          category: trivy-${{ matrix.image }}
+
+      - name: Block on critical problems that have a fix
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: eps-${{ matrix.image }}:${{ github.sha }}
+          format: table
+          severity: CRITICAL
+          # an unfixable CVE in a base image should not block unrelated work
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Log in to the registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish, tagged by commit
+        # tagged by SHA rather than latest, so a running container can always be
+        # traced back to the exact source that produced it
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.${{ matrix.image }}
+          push: true
+          tags: ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}

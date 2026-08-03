@@ -9,13 +9,13 @@
 
 Python, Flask, HTMX, Postgres, Docker Compose, and, one version at a time, Ansible, Kubernetes, Terraform and AWS.
 
-> **Status: v0.1, nearly at the tag.** The application is built and running: the dashboard, the journal, the calendar, settings, the background worker and the CI pipeline all exist. Google Calendar sync moved to v0.1.1. Anything else described here that does not exist yet is marked where it comes up.
+> **Status: v0.1, nearly at the tag.** The application is built and running: the dashboard, the journal, the calendar, settings, the background worker and the CI pipeline all exist. Anything described here that does not exist yet is marked where it comes up.
 
 <img alt="The dashboard: an agenda with an overdue block on top, then the day's events, tasks and trackers in one ordered list, with streaks, tracker schedules and latest metrics in a side column." src="docs/img/dashboard.png">
 
 ### Quick links
 
-[Why this exists](#why-this-exists) · [What it does](#what-it-does) · [How it is built](#how-it-is-built) · [How the data works](#how-the-data-works) · [The ladder](#the-ladder) · [Scope and non-goals](#scope-and-non-goals) · [Running it](#running-it) · [Design decisions](docs/decisions.md)
+[Why this exists](#why-this-exists) · [What it does](#what-it-does) · [What you track](#the-four-things-you-track) · [How it is built](#how-it-is-built) · [How the data works](#how-the-data-works) · [The ladder](#the-ladder) · [Scope and non-goals](#scope-and-non-goals) · [Running it](#running-it) · [Design decisions](docs/decisions.md)
 
 ---
 
@@ -44,7 +44,7 @@ One honest note about what this repository is. It is a learning project more tha
 
 ## What it does
 
-Everything below is single-user and server-rendered, and everything shown here exists and runs today. Three pages do almost all the work.
+Single-user, server-rendered, and everything in this section exists and runs today. Three pages do almost all the work, and the [next section](#the-four-things-you-track) covers what goes on them.
 
 **The dashboard is where a day happens.** One list, in order: anything overdue pinned to the top, then the day itself. Calendar events, tasks with a time on them, vital tasks, ordinary tasks and any tracker that has come due all sit on that one list, in one order, with what you finished sinking to the bottom crossed out. The next few days wait in their own groups underneath. A "Plan the day" mode adds move buttons so you can put the list in the order you actually intend to do it, and overdue items stay pinned regardless, because reordering your way out of a missed deadline is not planning. A task you have not touched in over a week gets flagged and asks whether you still mean to do it. That question is what stops the list silently clogging up. Anything new goes in through the Add panel at the top: a task, a habit, a tracker or a metric, one panel, no admin pages to visit first. That is the page in the screenshot above.
 
@@ -56,17 +56,27 @@ Everything below is single-user and server-rendered, and everything shown here e
 
 <img alt="A month grid. Each day cell shows a green or red dot for habits and a grey dot for notes, bad days are tinted red, and today is outlined." src="docs/img/calendar.png">
 
-The things those pages work with:
+A settings page holds the few global choices: the streak grace toggle, the forecast location, the daily fetch times and the timezone. Everything else is managed where you use it, so there are no admin pages to visit before you can start.
 
-**Streaks** are for forming good habits or minimising bad ones. Something you want to keep up, like sleeping on time or practising a skill or drinking less coffee, held day by day. Reach 7 days and you earn one free miss, which replenishes after another 7. That grace exists for things like staying under a calorie target, where the occasional splurge should not wipe out a month of progress. It can be turned off.
+<div align="right"><a href="#top">back to top</a></div>
 
-**Trackers** are days-since-last-done counters for recurring chores. Doing the dishes, grocery shopping, watering the plants. You set a threshold and the tracker stays quiet until that many days have passed, then surfaces on the dashboard like a task. Trackers can be pinned to weekdays, so a weekly errand only appears on Fridays.
+---
 
-**Tasks** carry dates, and that is the point of them. A deadline it must be done by, a scheduled date you intend to do it on, or a remind-after date that keeps it hidden until relevant. The dashboard sorts the day out of those dates, which is the maintenance work this app exists to take off you. Tasks are one-shot: recurring things are trackers, not tasks on repeat.
+## The four things you track
 
-**Daily metrics** are per-day numbers you define yourself, either a 1 to 5 scale for subjective ratings or a plain number with a unit. Sleep, mood, weight, whatever you care about, rather than a hardcoded list.
+Four kinds of thing go into EPS, and each one exists because the others handle it badly. That is the whole taxonomy; there is no fifth.
 
-Around the edges: the dashboard shows today's temperature range and rain chance, fetched from [BrightSky](https://brightsky.dev/), which is free and needs no key; a background worker warms the week's forecast each morning and clears audit-log entries older than 180 days each night. A settings page manages the streak grace toggle, the forecast location, the fetch times and the timezone. The timezone decides which calendar day an entry belongs to, so it is read once at startup and a change applies on the next restart, which the page says out loud. Calendar events already render on the dashboard and the day views, but the Google Calendar sync that would feed them real events is v0.1.1 work; until then the seed script provides example ones.
+**Streaks** are for forming good habits or minimising bad ones. Something you want to keep up daily, like sleeping on time, practising a skill, or drinking less coffee. Reach 7 days and you earn one free miss, which replenishes after another 7. That grace exists for things like staying under a calorie target, where an occasional splurge should not wipe out a month of progress. It can be turned off in settings for people who would rather the number be strict.
+
+**Trackers** are days-since-last-done counters for recurring chores. Doing the dishes, grocery shopping, watering the plants. You set a threshold and the tracker stays quiet until that many days have passed, then surfaces on the dashboard alongside your tasks. Trackers can be pinned to weekdays, so a weekly errand only appears on Fridays. A streak asks "did you do it today"; a tracker asks "how long has it been", and most recurring chores are the second question.
+
+**Tasks** carry dates, and that is the point of them. A deadline it must be done by, a scheduled date you intend to do it on, or a remind-after date that keeps it out of sight until it matters. The dashboard builds the day out of those dates, which is precisely the sorting work this project exists to take off you. Tasks are one-shot: anything that repeats is a tracker, not a task you keep recreating.
+
+**Daily metrics** are per-day numbers you define yourself, either a 1 to 5 scale for subjective ratings or a plain number with a unit. Sleep hours, mood, weight, steps, whatever you care about, rather than whichever three the developer decided to hardcode.
+
+Two smaller pieces sit underneath these. A **bad-day flag** per day, which stops unticked habits counting as misses on days that went badly. And an **audit log**, which records every change to past data, the table, the field, the old value and the new one, kept for 180 days. Nothing in the interface reads it yet; it exists so that editing history is never lossy, and as the foundation for showing that history later.
+
+The weather line on the dashboard comes from [BrightSky](https://brightsky.dev/), which is free and needs no key. Calendar events render on the dashboard and on past days, but nothing syncs a real calendar into them yet, so today they only appear if the seed script put them there.
 
 <div align="right"><a href="#top">back to top</a></div>
 
@@ -83,7 +93,7 @@ EPS runs as four containers, each with one job.
 
 - **nginx** is the front door and the only container reachable from the outside. It serves the static files and passes everything else inward. TLS arrives in v0.2, together with the first deployment that has a public address worth encrypting.
 - **web** is the application itself: Flask running under gunicorn, with every page rendered on the server through Jinja2 templates. The interactive touches come from HTMX, so there is no separate frontend application to maintain.
-- **worker** runs the scheduled jobs in its own process rather than inside a web request: the morning weather prefetch and the nightly audit-log cleanup, with the calendar fetch joining them in v0.1.1. Each job can also be invoked once by name from the command line. Nothing connects to the worker; it only reaches out.
+- **worker** runs the scheduled jobs in its own process rather than inside a web request: the morning weather prefetch and the nightly audit-log cleanup. Each job can also be invoked once by name from the command line, which is what a scheduled container elsewhere would call. Nothing connects to the worker; it only reaches out.
 - **Postgres** holds the data, accessed through SQLAlchemy, with every schema change applied as a versioned Alembic migration. Its files live on a named volume, so the data outlives the container.
 
 All four sit on a private network, and the only published port is nginx's. The why behind these picks, Flask over FastAPI, HTMX over a separate frontend, four containers rather than one or fifteen, lives in [the decisions notebook](docs/decisions.md).
@@ -187,7 +197,7 @@ That is the v0.1 done-line, stated as user documentation on purpose so there is 
 docker compose run --rm web python seed.py
 ```
 
-That fills the database with a couple of months of example history, safe to run repeatedly and safe to delete from. Google Calendar OAuth is v0.1.1; the app runs fine without it.
+That fills the database with a couple of months of example history, safe to run repeatedly and safe to delete from.
 
 <div align="right"><a href="#top">back to top</a></div>
 

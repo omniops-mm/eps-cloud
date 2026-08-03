@@ -5,8 +5,8 @@ it touched. That shape means the scheduler, a test and the command line can all
 call the same function without knowing about each other, and it gives every run
 something worth logging.
 
-Run one by hand, which is also how a scheduled container invokes a single job
-later in the deployment ladder:
+Run one directly, which is also how an external scheduler would invoke a single
+job without this project's own scheduler being involved:
 
     python -m worker.jobs cleanup-audit-log
 """

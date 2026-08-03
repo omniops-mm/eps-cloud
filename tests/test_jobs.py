@@ -77,7 +77,7 @@ class TestWeatherRefresh:
         assert len(db_session.scalars(select(WeatherCache)).all()) == warmed
 
     def test_running_twice_does_not_refetch(self, client: FlaskClient, stub_forecast: None) -> None:
-        """Cached days are left alone, which is what makes the job cheap to repeat."""
+        """Cached days are left alone, so repeating the job costs nothing."""
         db_session.add(UserSettings(id=1))
         db_session.flush()
         jobs.refresh_weather(db_session())

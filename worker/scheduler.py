@@ -6,9 +6,9 @@ container running UTC and survives daylight saving moving the offset underneath
 it. Cadences that the settings page owns are read once at startup, so a change
 applies on the next restart.
 
-Jobs themselves live in worker.jobs and know nothing about scheduling, which is
-what lets the same function be triggered by a scheduled container later in the
-deployment ladder instead of by this process.
+The jobs live in worker.jobs and know nothing about scheduling. That separation
+means an external scheduler can call the same functions directly, without this
+process running at all.
 """
 
 import datetime

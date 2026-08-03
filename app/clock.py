@@ -26,6 +26,9 @@ def _saved_zone() -> str | None:
     try:
         row = db_session.get(UserSettings, 1)
     except Exception:  # noqa: BLE001  # no database yet is a normal startup state
+        # a failed read leaves a useless session in the registry, and a later
+        # configure() cannot replace one that already exists
+        db_session.remove()
         return None
     if row is None:
         return None

@@ -10,9 +10,10 @@ import datetime
 import pytest
 from flask.testing import FlaskClient
 
-from app.clock import current_date, utc_now
+from app.clock import current_date, local_day_start_utc, utc_now, zone_name
 from app.db import db_session
-from app.models import Task, TrackerEvent
+from app.models import StreakState, Task, TrackerEvent
+from app.preferences import grace_enabled, read
 from app.routes.journal import day_items
 
 from .conftest import Builder
@@ -118,6 +119,103 @@ class TestDayView:
 
     def test_unparseable_date_is_not_found(self, client: FlaskClient) -> None:
         assert client.get("/journal/not-a-date").status_code == 404
+
+
+class TestPreferences:
+    def test_page_renders_on_an_install_with_no_saved_settings(self, client: FlaskClient) -> None:
+        """A fresh database has no settings row; the page must still work."""
+        assert read(db_session()) is None
+        response = client.get("/settings/")
+        assert response.status_code == 200
+        assert read(db_session()) is not None
+
+    def test_grace_toggle_persists_and_reverses(self, client: FlaskClient) -> None:
+        client.get("/settings/")
+        before = grace_enabled(db_session())
+        client.post("/settings/grace")
+        assert grace_enabled(db_session()) is not before
+        client.post("/settings/grace")
+        assert grace_enabled(db_session()) is before
+
+    def earn_forgiveness(self, web: Builder) -> tuple[int, str]:
+        """A streak long enough to absorb a miss, ending yesterday."""
+        streak_id = web.streak()
+        today = current_date()
+        web.log(streak_id, "PPPPPPPP", start=today - datetime.timedelta(days=8))
+        return streak_id, f"/journal/{today.isoformat()}/habit/{streak_id}/fail"
+
+    def test_missing_a_day_is_forgiven_while_grace_is_on(
+        self, client: FlaskClient, web: Builder
+    ) -> None:
+        streak_id, mark_missed = self.earn_forgiveness(web)
+        client.get("/settings/")
+
+        assert client.post(mark_missed).status_code == 200
+        state = db_session.get(StreakState, streak_id)
+        assert state is not None
+        assert state.current_streak > 0
+
+    def test_missing_a_day_resets_once_grace_is_off(
+        self, client: FlaskClient, web: Builder
+    ) -> None:
+        """Goes through the route, so it fails if the setting stops being read."""
+        streak_id, mark_missed = self.earn_forgiveness(web)
+        client.get("/settings/")
+        client.post("/settings/grace")
+
+        assert client.post(mark_missed).status_code == 200
+        state = db_session.get(StreakState, streak_id)
+        assert state is not None
+        assert state.current_streak == 0
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [("lat", "999"), ("lat", "north"), ("lon", "-500"), ("lon", "")],
+    )
+    def test_impossible_coordinates_are_refused(
+        self, client: FlaskClient, field: str, value: str
+    ) -> None:
+        client.get("/settings/")
+        form = {"lat": "52.52", "lon": "13.405"} | {field: value}
+        assert client.post("/settings/weather", data=form).status_code == 400
+
+    def test_valid_location_is_saved(self, client: FlaskClient) -> None:
+        client.get("/settings/")
+        response = client.post("/settings/weather", data={"lat": "48.2", "lon": "16.37"})
+        assert response.status_code == 302
+        prefs = read(db_session())
+        assert prefs is not None
+        assert float(prefs.weather_location_lat) == pytest.approx(48.2)
+
+    def test_saved_timezone_is_what_the_clock_uses(self, client: FlaskClient) -> None:
+        """Proves the setting reaches the clock, not just the column."""
+        client.get("/settings/")
+        assert client.post("/settings/timezone", data={"timezone": "Pacific/Auckland"}).status_code
+        assert zone_name() == "Pacific/Auckland"
+
+    def test_timezone_moves_when_a_day_starts(self, client: FlaskClient) -> None:
+        """Two zones put local midnight at different moments in UTC."""
+        day = datetime.date(2026, 6, 1)
+        client.get("/settings/")
+
+        client.post("/settings/timezone", data={"timezone": "Europe/Berlin"})
+        berlin = local_day_start_utc(day)
+
+        client.post("/settings/timezone", data={"timezone": "Pacific/Auckland"})
+        auckland = local_day_start_utc(day)
+
+        assert berlin != auckland
+
+    def test_an_unusable_saved_zone_is_refused(self, client: FlaskClient) -> None:
+        client.get("/settings/")
+        assert (
+            client.post("/settings/timezone", data={"timezone": "Mars/Olympus"}).status_code == 400
+        )
+
+    def test_unparseable_fetch_time_is_refused(self, client: FlaskClient) -> None:
+        client.get("/settings/")
+        form = {"calendar_fetch_time": "25:99", "weather_fetch_time": "06:00"}
+        assert client.post("/settings/fetch-times", data=form).status_code == 400
 
 
 class TestTrackerCorrection:

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app import create_app
+from app.clock import forget_zone
 from app.config import get_settings
 from app.db import db_session
 from app.models import Base, DailyState, HabitLog, Streak, Tracker, TrackerEvent
@@ -82,6 +83,14 @@ class Builder:
         for date in dates:
             self.session.add(DailyState(date=date, bad_day=True))
         self.session.flush()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_zone() -> Iterator[None]:
+    """The zone is cached per process, so drop it between tests."""
+    forget_zone()
+    yield
+    forget_zone()
 
 
 @pytest.fixture

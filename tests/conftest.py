@@ -9,9 +9,14 @@ import datetime
 from collections.abc import Iterator
 
 import pytest
+from flask.testing import FlaskClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
+from app import create_app
+from app.config import get_settings
+from app.db import db_session
 from app.models import Base, DailyState, HabitLog, Streak, Tracker, TrackerEvent
 
 # A Monday, so any weekday-dependent assertion reads unambiguously.
@@ -90,3 +95,35 @@ def session() -> Iterator[Session]:
 @pytest.fixture
 def build(session: Session) -> Builder:
     return Builder(session)
+
+
+@pytest.fixture
+def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[FlaskClient]:
+    """A test client wired to its own in-memory database.
+
+    StaticPool keeps every connection pointed at the same in-memory database;
+    without it each checkout gets a fresh empty one. The engine is swapped in
+    before create_app runs because the real one passes Postgres-only connect
+    arguments that SQLite refuses.
+    """
+    monkeypatch.setenv("DATABASE_URL", "sqlite://")
+    monkeypatch.setenv("SECRET_KEY", "test-only-not-a-real-key")
+    get_settings.cache_clear()
+
+    engine = create_engine(
+        "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
+    )
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr("app.db.get_engine", lambda: engine)
+
+    app = create_app()
+    with app.app_context():
+        yield app.test_client()
+    db_session.remove()
+    get_settings.cache_clear()
+
+
+@pytest.fixture
+def web(client: FlaskClient) -> Builder:
+    """Builder writing through the same session the routes use."""
+    return Builder(db_session())

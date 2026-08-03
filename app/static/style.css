@@ -316,7 +316,7 @@ button {
   font-size: 0.8rem;
 }
 
-/* sits in the old read-only status slot, same width, so the columns hold */
+/* the status column doubles as the control, so the row keeps four columns */
 .tracker-mark {
   padding: 0.2rem 0.5rem;
   border: 1px solid transparent;

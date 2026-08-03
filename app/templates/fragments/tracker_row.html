@@ -6,8 +6,8 @@
    the tracker rather than to the day, and changing it from inside a past day
    would quietly rewrite how every other day reads.
 
-   Layout contract: name stretches, everything else sits in fixed slots, and the
-   status column is the control rather than gaining a column of its own. #}
+   Layout contract: the name stretches, everything else sits in a fixed slot,
+   and the status slot is itself the control. #}
 <li class="tracker-row {{ 'is-done' if event }}" id="tracker-{{ tracker.id }}">
   <span class="habit-name">{{ tracker.name }}</span>
 

@@ -1,4 +1,8 @@
-"""Daily journal: the write surface for one day.
+"""The journal: one day at a time, and the place a day gets written down.
+
+For today it carries habits, trackers, daily metrics and the notes. For any
+other date it also lists that day's tasks and calendar entries, since there is
+no live agenda for a day that is not today.
 
 GET renders the day's page. Each POST endpoint records one interaction and
 returns only the re-rendered row, which htmx swaps into place, so the page
@@ -92,8 +96,8 @@ def day_items(day: datetime.date) -> list[dict]:
 
     A task counts as this day's if it was finished that day, was scheduled for
     it, or a deadline of its was still running. Anything finished before the day
-    began is already off the list by the time you get there, which is what keeps
-    a day in July from listing everything ever done since.
+    began is already off the list by the time you get there, which is what stops
+    an old day from listing everything completed since.
 
     "done_here" is not the same question as task.completed_at: a task finished
     next week was still open on this day and has to render that way.

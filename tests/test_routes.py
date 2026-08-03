@@ -103,7 +103,7 @@ class TestDayView:
         assert 'card-title">Tasks' in body
 
     def test_other_days_drop_the_dashboard_pill(self, client: FlaskClient) -> None:
-        """The "back to today" link is already the way home, so the pill goes."""
+        """Any day but today offers exactly one way back, the inline link."""
         past = (current_date() - datetime.timedelta(days=4)).isoformat()
         response = client.get(f"/journal/{past}")
         assert response.status_code == 200

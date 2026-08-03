@@ -1,5 +1,9 @@
-"""Fill a database with a few weeks of plausible use, so a fresh install is not
-an empty void and so the screens can be judged with something in them.
+"""Fill a database with a few weeks of plausible use.
+
+A brand new install has nothing in it, which makes it hard to tell what any of
+the screens are for. This gives you a system that looks lived in: streaks partly
+built, trackers at various stages, tasks in every state, a couple of months of
+history behind the calendar.
 
     uv run python seed.py
 

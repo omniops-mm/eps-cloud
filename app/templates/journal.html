@@ -6,21 +6,61 @@
 {% block content %}
 <header class="day-plate">
   <div class="day-plate-top">
-    <p class="day-plate-kicker">Daily journal</p>
-    <a class="tool-btn" href="/">Back to dashboard</a>
+    <div>
+      <p class="day-plate-kicker">Daily journal</p>
+      <h1 class="day-plate-weekday">{{ day.strftime("%A") }}</h1>
+      <p class="day-plate-date">
+        {{ day.strftime("%d %B %Y") }}
+        {% if day != today %}
+          <a class="back-to-today" href="{{ url_for('dashboard.index') }}">
+            viewing {{ "a past" if day < today else "a future" }} day &middot; back to today
+          </a>
+        {% endif %}
+        {% if bad_day %}<span class="chip chip-danger">bad day</span>{% endif %}
+      </p>
+    </div>
+    <nav class="plate-nav">
+      {# on any other day the "back to today" link above is already the way home #}
+      {% if day == today %}
+        <a class="tool-btn" href="{{ url_for('dashboard.index') }}">Dashboard</a>
+      {% endif %}
+      <a class="tool-btn" href="{{ url_for('calendar.this_month') }}">Calendar</a>
+    </nav>
   </div>
-  <h1 class="day-plate-weekday">{{ day.strftime("%A") }}</h1>
-  <p class="day-plate-date">
-    {{ day.strftime("%d %B %Y") }}
-    {% if day != today %}
-      <a class="back-to-today" href="/journal/">viewing a past day &middot; back to today</a>
-    {% endif %}
-    {% if bad_day %}<span class="chip chip-danger">bad day</span>{% endif %}
-  </p>
 </header>
 
 <div class="dash-grid">
 <div class="dash-main">
+{# tasks only appear on days you reach through the calendar. Today's tasks are
+   the dashboard's job, and today's journal is for winding down, not planning. #}
+{% if day != today %}
+<section class="card">
+  <h2 class="card-title">Tasks</h2>
+  {% if items %}
+  <ul class="row-list">
+    {% for row in items %}
+      {% if row.kind == "event" %}
+      <li class="task-row event-row">
+        <span class="event-mark" title="From your calendar, not checkable here">&#8211;</span>
+        <span class="row-time">{{ row.event.start_at.strftime("%H:%M") }}</span>
+        <span class="task-name">{{ row.event.title }}</span>
+        <span class="task-status"><span class="task-meta">calendar</span></span>
+        <span class="row-actions"></span>
+      </li>
+      {% else %}
+        {% with task = row.task, tomorrow = row.tomorrow, overdue_days = row.overdue_days,
+                stale = row.stale, done = row.done_here %}
+          {% include "fragments/task_row.html" %}
+        {% endwith %}
+      {% endif %}
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty-note">Nothing was on the list for this day.</p>
+  {% endif %}
+</section>
+{% endif %}
+
 <section class="card">
   <h2 class="card-title">Habits</h2>
   {% if rows %}

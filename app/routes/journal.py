@@ -12,16 +12,16 @@ app.audit.
 
 import datetime
 import decimal
-import zoneinfo
 
 from flask import Blueprint, abort, redirect, render_template, request, url_for
 from sqlalchemy import select
 from werkzeug.wrappers import Response
 
 from app.audit import maybe_audit
-from app.config import get_settings
+from app.clock import current_date, local_date_of, local_day_start_utc, utc_now
 from app.db import db_session
 from app.models import (
+    CalendarEvent,
     DailyNote,
     DailyState,
     HabitLog,
@@ -29,30 +29,15 @@ from app.models import (
     MetricLog,
     Streak,
     StreakState,
+    Task,
     Tracker,
     TrackerEvent,
     TrackerState,
 )
-from app.recompute import recompute_streak_state
+from app.recompute import recompute_streak_state, recompute_tracker_state
+from app.routes.dashboard import effective_key, task_ctx
 
 bp = Blueprint("journal", __name__, url_prefix="/journal")
-
-
-def current_date() -> datetime.date:
-    """Today in the configured timezone, not the server's UTC clock."""
-    return datetime.datetime.now(zoneinfo.ZoneInfo(get_settings().tz)).date()
-
-
-def utc_now() -> datetime.datetime:
-    """Naive-UTC timestamp, matching what the database defaults store."""
-    return datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
-
-
-def local_day_start_utc(day: datetime.date) -> datetime.datetime:
-    """Local midnight of a day, expressed in naive UTC for column comparisons."""
-    zone = zoneinfo.ZoneInfo(get_settings().tz)
-    midnight = datetime.datetime.combine(day, datetime.time.min, tzinfo=zone)
-    return midnight.astimezone(datetime.UTC).replace(tzinfo=None)
 
 
 def parse_date(value: str) -> datetime.date:
@@ -102,6 +87,42 @@ def metric_rows(day: datetime.date) -> list[dict]:
     return [{"metric": m, "entry": entries.get(m.id)} for m in metrics]
 
 
+def day_items(day: datetime.date) -> list[dict]:
+    """Tasks and calendar events belonging to one day, finished or not.
+
+    A task counts as this day's if it was finished that day, was scheduled for
+    it, or a deadline of its was still running. Anything finished before the day
+    began is already off the list by the time you get there, which is what keeps
+    a day in July from listing everything ever done since.
+
+    "done_here" is not the same question as task.completed_at: a task finished
+    next week was still open on this day and has to render that way.
+    """
+    day_start = local_day_start_utc(day)
+    day_end = local_day_start_utc(day + datetime.timedelta(days=1))
+
+    rows: list[dict] = []
+    for task in db_session.scalars(select(Task).where(Task.archived_at.is_(None))):
+        done_here = False
+        if task.completed_at is not None:
+            if task.completed_at < day_start:
+                continue
+            done_here = task.completed_at < day_end
+        if task.remind_after and task.remind_after > day:
+            continue
+        within_deadline = task.deadline is not None and local_date_of(task.created_at) <= day
+        if done_here or task.scheduled_for == day or within_deadline:
+            rows.append(task_ctx(task, day) | {"done_here": done_here})
+
+    rows.extend(
+        {"kind": "event", "event": event}
+        for event in db_session.scalars(select(CalendarEvent).where(CalendarEvent.date == day))
+    )
+    # finished items sink; the rest keep the agenda's ordering grammar
+    rows.sort(key=lambda row: (row.get("done_here", False), effective_key(row)))
+    return rows
+
+
 @bp.get("/")
 def today() -> Response:
     return redirect(url_for("journal.day", date=current_date().isoformat()))
@@ -110,12 +131,16 @@ def today() -> Response:
 @bp.get("/<date>")
 def day(date: str) -> str:
     day = parse_date(date)
+    now = current_date()
     daily = db_session.get(DailyState, day)
     note = db_session.get(DailyNote, day)
     return render_template(
         "journal.html",
         day=day,
-        today=current_date(),
+        today=now,
+        # today's tasks belong to the dashboard, so this page only carries them
+        # for the other days, the ones reached through the calendar
+        items=day_items(day) if day != now else [],
         rows=habit_rows(day),
         trackers=tracker_rows(day),
         metrics=metric_rows(day),
@@ -171,6 +196,50 @@ def mark_habit(date: str, streak_id: int, mark: str) -> str:
 
     return render_template(
         "fragments/habit_row.html", streak=streak, state=state, entry=entry, day=day
+    )
+
+
+@bp.post("/<date>/tracker/<int:tracker_id>")
+def mark_tracker(date: str, tracker_id: int) -> str:
+    """Record or clear one tracker's doing on one day.
+
+    The agenda can only ever toggle today, so this is the only way to fix a day
+    you forgot to tick. Pressing it again removes the entry, same rule as the
+    habit marks. The cadence itself is not touchable from here.
+    """
+    day = parse_date(date)
+    tracker = db_session.get(Tracker, tracker_id)
+    if tracker is None:
+        abort(404)
+
+    event = db_session.get(TrackerEvent, (day, tracker_id))
+    old: bool | None
+    new: bool | None
+    if event is None:
+        event = TrackerEvent(date=day, tracker_id=tracker_id, activity_done=True)
+        db_session.add(event)
+        old, new = None, True
+    else:
+        old, new = event.activity_done, None
+        db_session.delete(event)
+        event = None
+
+    session = db_session()
+    maybe_audit(
+        session,
+        table="tracker_events",
+        row_id=f"{day.isoformat()}:{tracker_id}",
+        field="activity_done",
+        old=old,
+        new=new,
+        entry_date=day,
+        today=current_date(),
+    )
+    state = recompute_tracker_state(session, tracker_id, today=current_date())
+    db_session.commit()
+
+    return render_template(
+        "fragments/tracker_row.html", tracker=tracker, state=state, event=event, day=day
     )
 
 

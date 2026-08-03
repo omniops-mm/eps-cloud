@@ -1,7 +1,14 @@
-{# Needs: tracker, state, event (may be none), day. Journal view of a tracker:
-   read-only. Doing a tracker happens on the dashboard agenda; this row just
-   shows how the day looked. #}
-<li class="tracker-row {{ 'is-done' if event }}">
+{# Needs: tracker, state, event (may be none), day. The day view of a tracker.
+
+   Whether it was done on a given day is correctable here, because the agenda
+   can only ever toggle today, so a day you forgot to tick would otherwise stay
+   wrong forever. How often it comes due is not editable here: that belongs to
+   the tracker rather than to the day, and changing it from inside a past day
+   would quietly rewrite how every other day reads.
+
+   Layout contract: name stretches, everything else sits in fixed slots, and the
+   status column is the control rather than gaining a column of its own. #}
+<li class="tracker-row {{ 'is-done' if event }}" id="tracker-{{ tracker.id }}">
   <span class="habit-name">{{ tracker.name }}</span>
 
   <span class="tracker-since">
@@ -17,7 +24,11 @@
     {% endif %}
   </span>
 
-  <span class="tracker-status {{ 'tracker-status-done' if event }}">
+  <button class="tracker-mark {{ 'is-active' if event }}"
+          hx-post="/journal/{{ day.isoformat() }}/tracker/{{ tracker.id }}"
+          hx-target="#tracker-{{ tracker.id }}" hx-swap="outerHTML"
+          aria-pressed="{{ 'true' if event else 'false' }}"
+          aria-label="Mark {{ tracker.name }} as done on this day">
     {{ "done" if event else "not done" }}
-  </span>
+  </button>
 </li>

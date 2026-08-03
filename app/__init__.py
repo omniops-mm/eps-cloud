@@ -5,7 +5,7 @@ from flask import Flask
 from app import db, metrics
 from app.config import get_settings
 from app.logging import configure_logging
-from app.routes import dashboard, health, journal
+from app.routes import calendar, dashboard, health, journal
 
 
 def create_app() -> Flask:
@@ -17,4 +17,5 @@ def create_app() -> Flask:
     app.register_blueprint(health.bp)
     app.register_blueprint(journal.bp)
     app.register_blueprint(dashboard.bp)
+    app.register_blueprint(calendar.bp)
     return app

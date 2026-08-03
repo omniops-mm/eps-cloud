@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Calendar &middot; {{ month_name }} {{ year }}{% endblock %}
+
+{% block content %}
+<header class="day-plate">
+  <div class="day-plate-top">
+    <div>
+      <p class="day-plate-kicker">Calendar</p>
+      <h1 class="day-plate-weekday">{{ month_name }}</h1>
+      <p class="day-plate-date">{{ year }}</p>
+    </div>
+    <nav class="plate-nav">
+      <a class="tool-btn" href="{{ url_for('dashboard.index') }}">Dashboard</a>
+    </nav>
+  </div>
+</header>
+
+<section class="card cal-card">
+  <div class="cal-nav">
+    <a class="tool-btn" href="{{ url_for('calendar.month', year=prev_year, month=prev_month) }}"
+       aria-label="Previous month">&larr;<span class="cal-nav-word"> Previous</span></a>
+    {% if not is_current_month %}
+      <a class="tool-btn" href="{{ url_for('calendar.this_month') }}">This month</a>
+    {% endif %}
+    <a class="tool-btn" href="{{ url_for('calendar.month', year=next_year, month=next_month) }}"
+       aria-label="Next month"><span class="cal-nav-word">Next </span>&rarr;</a>
+  </div>
+
+  <div class="cal-grid">
+    {% for long, short in [("Mon", "M"), ("Tue", "T"), ("Wed", "W"),
+                           ("Thu", "T"), ("Fri", "F"), ("Sat", "S"), ("Sun", "S")] %}
+      <div class="cal-head">
+        <span class="cal-head-long">{{ long }}</span>
+        <span class="cal-head-short" aria-hidden="true">{{ short }}</span>
+      </div>
+    {% endfor %}
+
+    {% for week in weeks %}
+      {% for day in week %}
+        {% set summary = days.get(day) %}
+        <a class="cal-day{{ ' is-outside' if day.month != month }}{{ ' is-today' if day == today }}{{ ' is-future' if day > today }}{{ ' is-badday' if summary and summary.bad_day }}"
+           href="{{ url_for('journal.day', date=day.isoformat()) }}"
+           aria-label="{{ day.day }} {{ day.strftime('%B %Y') }}{% if summary %}{% if summary.passed %}, {{ summary.passed }} kept{% endif %}{% if summary.failed %}, {{ summary.failed }} missed{% endif %}{% if summary.bad_day %}, marked a bad day{% endif %}{% if summary.has_note %}, has a note{% endif %}{% endif %}">
+          <span class="cal-daynum">{{ day.day }}</span>
+          <span class="cal-marks" aria-hidden="true">
+            {%- if summary -%}
+              {%- if summary.failed %}<span class="cal-dot cal-dot-fail"></span>
+              {%- elif summary.passed %}<span class="cal-dot cal-dot-pass"></span>
+              {%- endif %}
+              {%- if summary.has_note %}<span class="cal-dot cal-dot-note"></span>{% endif -%}
+            {%- endif -%}
+          </span>
+        </a>
+      {% endfor %}
+    {% endfor %}
+  </div>
+
+  <ul class="cal-legend">
+    <li><span class="cal-dot cal-dot-pass"></span>every habit kept</li>
+    <li><span class="cal-dot cal-dot-fail"></span>one or more missed</li>
+    <li><span class="cal-dot cal-dot-note"></span>has a note</li>
+    <li><span class="cal-swatch cal-swatch-bad"></span>bad day</li>
+  </ul>
+</section>
+{% endblock %}

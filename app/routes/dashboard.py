@@ -24,6 +24,7 @@ from flask import Blueprint, abort, redirect, render_template, request, url_for
 from sqlalchemy import select
 from werkzeug.wrappers import Response
 
+from app.clock import current_date, local_day_start_utc, utc_now
 from app.db import db_session
 from app.integrations.brightsky import weather_summary
 from app.models import (
@@ -40,7 +41,6 @@ from app.models import (
     TrackerState,
 )
 from app.recompute import recompute_tracker_state
-from app.routes.journal import current_date, local_day_start_utc, utc_now
 
 bp = Blueprint("dashboard", __name__)
 

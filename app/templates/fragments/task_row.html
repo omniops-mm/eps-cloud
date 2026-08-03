@@ -6,12 +6,15 @@
    name and tags (stretches) | status (fixed, right-aligned) | actions. #}
 {% set plan = plan|default(false) %}
 {% set movable = movable|default(false) %}
-<li class="task-row {{ 'is-done' if task.completed_at }} {{ 'is-vital' if task.vital }}"
+{# a day view asks "was this done on THAT day", which a task finished later
+   answers differently from task.completed_at; everywhere else they agree #}
+{% set done = task.completed_at if done is not defined else done %}
+<li class="task-row {{ 'is-done' if done }} {{ 'is-vital' if task.vital }}"
     id="task-{{ task.id }}">
-  <button class="task-check {{ 'is-active' if task.completed_at }}"
+  <button class="task-check {{ 'is-active' if done }}"
           hx-post="/tasks/{{ task.id }}/toggle{{ '?plan=1' if plan }}"
           hx-target="#task-{{ task.id }}" hx-swap="outerHTML"
-          aria-pressed="{{ 'true' if task.completed_at else 'false' }}"
+          aria-pressed="{{ 'true' if done else 'false' }}"
           aria-label="Mark {{ task.name }} as done">&#10003;</button>
 
   <span class="row-time">
@@ -67,7 +70,7 @@
       <div class="task-menu-panel">
         <button hx-post="/tasks/{{ task.id }}/toggle{{ '?plan=1' if plan }}"
                 hx-target="#task-{{ task.id }}" hx-swap="outerHTML">
-          {{ "Not done after all" if task.completed_at else "Already done" }}
+          {{ "Not done after all" if done else "Already done" }}
         </button>
         <button hx-post="/tasks/{{ task.id }}/vital{{ '?plan=1' if plan }}"
                 hx-target="#task-{{ task.id }}" hx-swap="outerHTML">

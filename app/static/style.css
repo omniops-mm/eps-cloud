@@ -316,14 +316,29 @@ button {
   font-size: 0.8rem;
 }
 
-.tracker-status {
+/* sits in the old read-only status slot, same width, so the columns hold */
+.tracker-mark {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
   font-size: 0.85rem;
-  text-align: right;
+  text-align: center;
+  transition: border-color 0.12s ease;
 }
 
-.tracker-status-done {
+.tracker-mark:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.tracker-mark.is-active {
+  background: var(--ok-soft);
   color: var(--ok);
+}
+
+.tracker-mark.is-active:hover {
+  border-color: var(--ok);
 }
 
 /* ---------- metric rows ---------- */
@@ -476,21 +491,12 @@ button {
   gap: 1rem;
 }
 
-.journal-btn {
-  display: block;
-  margin-top: 1.25rem;
-  padding: 0.8rem;
-  text-align: center;
-  border-radius: var(--radius);
-  background: var(--accent);
-  color: var(--bg);
-  font-family: var(--font-display);
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.journal-btn:hover {
-  filter: brightness(1.08);
+/* page navigation in the day plate: same row as the add button on the dashboard */
+.plate-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: none;
 }
 
 /* ---------- task rows ---------- */
@@ -1150,4 +1156,177 @@ button {
 .weekday-pill input:focus-visible + span {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* ---------- calendar ---------- */
+
+.cal-card {
+  /* the grid shortens its labels against the card, not the viewport */
+  container-type: inline-size;
+}
+
+.cal-nav {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+/* pins next to the right edge so previous and next never swap places when the
+   "this month" button appears and disappears */
+.cal-nav a:last-child {
+  margin-left: auto;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: minmax(4.25rem, auto);
+  gap: 0.35rem;
+}
+
+.cal-head {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  align-self: end;
+  padding-bottom: 0.4rem;
+}
+
+/* the header row is labels, not cells, so it does not get the tall minimum */
+.cal-grid > .cal-head {
+  grid-row: 1;
+  min-height: 0;
+}
+
+.cal-head-short {
+  display: none;
+}
+
+.cal-day {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--surface-raised);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 0.12s ease;
+}
+
+.cal-day:hover {
+  border-color: var(--accent);
+}
+
+.cal-daynum {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* markers sit at the bottom of the cell so they line up across the whole row
+   regardless of how the numbers above them differ */
+.cal-marks {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.cal-day.is-outside {
+  background: none;
+  border-color: transparent;
+}
+
+.cal-day.is-outside .cal-daynum {
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.cal-day.is-future .cal-daynum {
+  color: var(--text-muted);
+}
+
+.cal-day.is-today {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.cal-day.is-today .cal-daynum {
+  color: var(--accent);
+}
+
+.cal-day.is-badday {
+  background: var(--danger-soft);
+}
+
+.cal-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: var(--radius-pill);
+  flex: none;
+}
+
+.cal-dot-pass {
+  background: var(--ok);
+}
+
+.cal-dot-fail {
+  background: var(--danger);
+}
+
+.cal-dot-note {
+  background: var(--border-strong);
+}
+
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  margin-top: 1rem;
+  padding: 0;
+  list-style: none;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.cal-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cal-swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 3px;
+  flex: none;
+}
+
+.cal-swatch-bad {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger);
+}
+
+/* narrow column: shorten the labels, keep the seven columns */
+@container (max-width: 34rem) {
+  .cal-head-long {
+    display: none;
+  }
+
+  .cal-head-short {
+    display: inline;
+  }
+
+  .cal-nav-word {
+    display: none;
+  }
+
+  .cal-day {
+    padding: 0.3rem 0.35rem;
+  }
 }

@@ -9,7 +9,7 @@
 
 Python, Flask, HTMX, Postgres, Docker Compose, and, one version at a time, Ansible, Kubernetes, Terraform and AWS.
 
-> **Status: v0.1, nearly at the tag.** The application is built and running: the dashboard, the journal, the calendar, settings, the background worker and the CI pipeline all exist. Anything described here that does not exist yet is marked where it comes up.
+> **Status: [v0.1.0](https://github.com/omniops-mm/eps-cloud/releases/tag/v0.1.0) is out.** Clone it, copy the env file, `docker compose up`, and it works. v0.2 is next: Ansible onto a real VM, which is where this stops being something that only runs on my machine. Anything described here that does not exist yet is marked where it comes up.
 
 <img alt="The dashboard: an agenda with an overdue block on top, then the day's events, tasks and trackers in one ordered list, with streaks, tracker schedules and latest metrics in a side column." src="docs/img/dashboard.png">
 
@@ -129,13 +129,13 @@ Each version adds one real piece of infrastructure. The application barely chang
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/ladder-dark.svg">
-  <img alt="A staircase rising left to right: v0.1 Compose in progress, then v0.2 Ansible, v0.3 Kubernetes, v1.0 Terraform and v1.x EKS, planned." src="docs/img/ladder-light.svg">
+  <img alt="A staircase rising left to right: v0.1 Compose done, v0.2 Ansible in progress, then v0.3 Kubernetes, v1.0 Terraform and v1.x EKS, planned." src="docs/img/ladder-light.svg">
 </picture>
 
 | Version | What it adds | What it is there to prove | Status |
 | --- | --- | --- | --- |
-| **v0.1** | The four containers under Compose. Multi-stage non-root Dockerfiles, pinned bases, a private network, healthchecks, a named Postgres volume. Alembic from the first commit. CI: ruff, mypy, pytest, build, gitleaks and Trivy. Images to GHCR by commit SHA. | That the application is actually built, containerised properly and tested, and that the security and observability threads start at the beginning rather than getting bolted on. | In progress |
-| **v0.2** | Ansible provisions a cheap VM, installs Docker, brings the Compose stack up, with secrets in Ansible Vault. | Configuration management, and it produces the first URL anyone can actually visit, months before there is a Kubernetes or AWS bill. | Planned |
+| **v0.1** | The four containers under Compose. Multi-stage non-root Dockerfiles, pinned bases, a private network, healthchecks, a named Postgres volume. Alembic from the first commit. CI: ruff, mypy, pytest, build, gitleaks and Trivy. Images to GHCR by commit SHA. | That the application is actually built, containerised properly and tested, and that the security and observability threads start at the beginning rather than getting bolted on. | **Done**, tagged [v0.1.0](https://github.com/omniops-mm/eps-cloud/releases/tag/v0.1.0) |
+| **v0.2** | Ansible provisions a cheap VM, installs Docker, brings the Compose stack up, with secrets in Ansible Vault. | Configuration management, and it produces the first URL anyone can actually visit, months before there is a Kubernetes or AWS bill. | In progress |
 | **v0.3** | The Compose stack becomes Helm charts on a local kind cluster. NetworkPolicies, the worker's jobs as CronJobs, probes, resource limits, an HPA, ingress-nginx and cert-manager, a k6 load test that trips the autoscaler, and a local Prometheus and Grafana. | Kubernetes, built and broken locally for free. Raw manifests first to learn the primitives, then Helm to template them. | Planned |
 | **v1.0** | AWS through Terraform. A hand-rolled VPC with custom CIDR, public and private subnets across two AZs, IGW, NAT, route tables, security groups and NACLs. RDS, IAM, remote state on S3 with DynamoDB locking. CD through GitHub Actions authenticating by OIDC. tfsec or Checkov on the Terraform, Budgets and Infracost on the bill. | Infrastructure as code against a real cloud. The VPC is hand-rolled rather than taking the default-VPC shortcut, because the default VPC hides exactly the parts I am trying to learn. | Planned |
 | **v1.x** | The same Helm charts onto EKS behind an ALB. IRSA for keyless AWS access, Secrets Manager through the External Secrets Operator, Prometheus, Grafana, Alertmanager and Loki, deploys moved to ArgoCD, Pod Security Admission on top. | The capstone. Managed Kubernetes with the security and observability stories finished rather than sketched. | Planned |

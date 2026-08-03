@@ -38,6 +38,7 @@ from app.models import (
     TrackerEvent,
     TrackerState,
 )
+from app.preferences import grace_enabled
 from app.recompute import recompute_streak_state, recompute_tracker_state
 from app.routes.dashboard import effective_key, task_ctx
 
@@ -195,7 +196,9 @@ def mark_habit(date: str, streak_id: int, mark: str) -> str:
         entry_date=day,
         today=current_date(),
     )
-    state = recompute_streak_state(session, streak_id, today=current_date())
+    state = recompute_streak_state(
+        session, streak_id, today=current_date(), grace_enabled=grace_enabled(session)
+    )
     db_session.commit()
 
     return render_template(
@@ -333,8 +336,9 @@ def toggle_bad_day(date: str) -> Response:
         entry_date=day,
         today=current_date(),
     )
+    grace = grace_enabled(session)
     for streak_id in db_session.scalars(select(Streak.id).where(Streak.archived_at.is_(None))):
-        recompute_streak_state(session, streak_id, today=current_date())
+        recompute_streak_state(session, streak_id, today=current_date(), grace_enabled=grace)
     db_session.commit()
 
     return redirect(url_for("journal.day", date=day.isoformat()))

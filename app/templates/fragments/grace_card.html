@@ -1,0 +1,21 @@
+{# Needs: prefs. Rendered inside settings.html and returned alone by the toggle,
+   so both paths produce the same markup. #}
+<section class="card" id="grace-card">
+  <h2 class="card-title">Streak forgiveness</h2>
+  <div class="pref-row">
+    <span class="pref-label">
+      Absorb a missed day
+      <span class="pref-hint">
+        A streak of seven days or longer survives one missed day instead of
+        resetting. It can only do this once a week, so it forgives a slip
+        without hiding a habit you have stopped keeping.
+      </span>
+    </span>
+    <button class="pref-toggle {{ 'is-active' if prefs.grace_enabled }}"
+            hx-post="{{ url_for('settings.toggle_grace') }}"
+            hx-target="#grace-card" hx-swap="outerHTML"
+            aria-pressed="{{ 'true' if prefs.grace_enabled else 'false' }}">
+      {{ "On" if prefs.grace_enabled else "Off" }}
+    </button>
+  </div>
+</section>

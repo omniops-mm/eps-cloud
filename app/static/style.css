@@ -1158,6 +1158,122 @@ button {
   outline-offset: 2px;
 }
 
+/* ---------- preferences ---------- */
+
+/* same grammar as every other row: the label stretches, the control is pinned
+   in a fixed slot, so controls line up down the card whatever the label says */
+.pref-row {
+  display: grid;
+  grid-template-columns: 1fr 7rem;
+  align-items: start;
+  gap: 0.8rem;
+  padding: 0.6rem 0;
+}
+
+.pref-row + .pref-row {
+  border-top: 1px solid var(--border);
+}
+
+.pref-label {
+  display: block;
+}
+
+.pref-hint {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.pref-input {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) - 6px);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.pref-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.pref-static {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.pref-toggle {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  transition: border-color 0.12s ease;
+}
+
+.pref-toggle:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.pref-toggle.is-active {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.pref-toggle.is-active:hover {
+  border-color: var(--accent);
+}
+
+.pref-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+}
+
+.pref-actions button {
+  padding: 0.45rem 0.9rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--bg);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.pref-actions button:hover {
+  filter: brightness(1.08);
+}
+
+.pref-saved {
+  color: var(--ok);
+  font-size: 0.85rem;
+}
+
+/* a long zone name needs the whole card, so this row stacks instead */
+.pref-row-wide {
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+}
+
+.pref-warning {
+  margin-top: 0.7rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: calc(var(--radius) - 6px);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
 /* ---------- calendar ---------- */
 
 .cal-card {

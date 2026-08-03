@@ -212,8 +212,11 @@ class UserSettings(Base):
     __table_args__ = (CheckConstraint("id = 1", name="settings_single_row"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    # IANA name. Read once per process and cached, never per call, because it
+    # decides which day an entry belongs to and that answer must not change
+    # halfway through a request. Changing it takes effect on restart.
     timezone: Mapped[str] = mapped_column(Text, default="Europe/Berlin")
-    # streak forgiveness on or off; the recompute functions take it as an argument
+    # streak forgiveness on or off
     grace_enabled: Mapped[bool] = mapped_column(default=True)
     calendar_fetch_time: Mapped[datetime.time] = mapped_column(default=datetime.time(6, 0))
     weather_fetch_time: Mapped[datetime.time] = mapped_column(default=datetime.time(6, 0))

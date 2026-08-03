@@ -39,6 +39,7 @@ from app.models import (
     Tracker,
     TrackerEvent,
 )
+from app.preferences import grace_enabled
 from app.recompute import recompute_streak_state, recompute_tracker_state
 
 # fixed seed: re-running gives the same history rather than a new random one
@@ -250,8 +251,9 @@ def main() -> None:
 
         # the caches are derived, so rebuild them rather than writing them here
         session = db_session()
+        grace = grace_enabled(session)
         for streak in streaks:
-            recompute_streak_state(session, streak.id, today=today)
+            recompute_streak_state(session, streak.id, today=today, grace_enabled=grace)
         for tracker in trackers:
             recompute_tracker_state(session, tracker.id, today=today)
 

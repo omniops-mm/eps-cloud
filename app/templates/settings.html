@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block page_class %}page-wide{% endblock %}
+
+{% block content %}
+<header class="day-plate">
+  <div class="day-plate-top">
+    <div>
+      <p class="day-plate-kicker">Settings</p>
+      <h1 class="day-plate-weekday">Preferences</h1>
+      <p class="day-plate-date">
+        Habits, trackers, metrics and tasks are managed where you use them.
+      </p>
+    </div>
+    <nav class="plate-nav">
+      <a class="tool-btn" href="{{ url_for('dashboard.index') }}">Dashboard</a>
+      <a class="tool-btn" href="{{ url_for('calendar.this_month') }}">Calendar</a>
+    </nav>
+  </div>
+</header>
+
+<div class="dash-grid">
+  <div class="dash-main">
+    {% include "fragments/grace_card.html" %}
+
+    <section class="card">
+      <h2 class="card-title">Daily fetches</h2>
+      <form class="pref-form" method="post" action="{{ url_for('settings.save_fetch_times') }}">
+        <div class="pref-row">
+          <label class="pref-label" for="calendar-fetch">
+            Calendar
+            <span class="pref-hint">When the day's events are pulled in.</span>
+          </label>
+          <input class="pref-input" id="calendar-fetch" type="time" name="calendar_fetch_time"
+                 value="{{ prefs.calendar_fetch_time.strftime('%H:%M') }}" required>
+        </div>
+        <div class="pref-row">
+          <label class="pref-label" for="weather-fetch">
+            Weather
+            <span class="pref-hint">When the forecast is pulled in.</span>
+          </label>
+          <input class="pref-input" id="weather-fetch" type="time" name="weather_fetch_time"
+                 value="{{ prefs.weather_fetch_time.strftime('%H:%M') }}" required>
+        </div>
+        <div class="pref-actions">
+          {% if request.args.get("saved") == "times" %}
+            <span class="pref-saved" role="status">Saved</span>
+          {% endif %}
+          <button type="submit">Save times</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <aside class="dash-side">
+    <section class="card">
+      <h2 class="card-title">Weather location</h2>
+      <form class="pref-form" method="post" action="{{ url_for('settings.save_weather') }}">
+        <div class="pref-row">
+          <label class="pref-label" for="lat">Latitude</label>
+          <input class="pref-input" id="lat" type="number" name="lat" step="0.0001"
+                 min="-90" max="90" value="{{ prefs.weather_location_lat }}" required>
+        </div>
+        <div class="pref-row">
+          <label class="pref-label" for="lon">Longitude</label>
+          <input class="pref-input" id="lon" type="number" name="lon" step="0.0001"
+                 min="-180" max="180" value="{{ prefs.weather_location_lon }}" required>
+        </div>
+        <p class="pref-hint">
+          The forecast covers this point. Anywhere in your town is close enough.
+        </p>
+        <div class="pref-actions">
+          {% if request.args.get("saved") == "weather" %}
+            <span class="pref-saved" role="status">Saved</span>
+          {% endif %}
+          <button type="submit">Save location</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2 class="card-title">Timezone</h2>
+      <form class="pref-form" method="post" action="{{ url_for('settings.save_timezone') }}">
+        <div class="pref-row pref-row-wide">
+          <label class="pref-label" for="timezone">
+            Zone
+            <span class="pref-hint">
+              Decides which day an entry belongs to. A change applies when the
+              app next starts, so that one answer holds for a whole request.
+            </span>
+          </label>
+          <select class="pref-input" id="timezone" name="timezone" required>
+            {% for name in zones %}
+              <option value="{{ name }}" {{ "selected" if name == prefs.timezone }}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% if prefs.timezone != active_zone %}
+          <p class="pref-warning" role="status">
+            Saved as {{ prefs.timezone }}. Still running on {{ active_zone }} until you restart.
+          </p>
+        {% endif %}
+        <div class="pref-actions">
+          {% if request.args.get("saved") == "timezone" %}
+            <span class="pref-saved" role="status">Saved</span>
+          {% endif %}
+          <button type="submit">Save timezone</button>
+        </div>
+      </form>
+    </section>
+  </aside>
+</div>
+{% endblock %}

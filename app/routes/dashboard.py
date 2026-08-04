@@ -9,7 +9,8 @@ The agenda regions, top to bottom:
    first), then trackers. "Plan the day" mode reorders tasks and trackers
    freely around the fixed calendar events.
 3. Tasks finished today, crossed out.
-4. Upcoming: one group per day for the next five days.
+4. Upcoming: one group per day for the week ahead, each trimmed to its first
+   few tasks and headed by a link to that day's own page.
 
 Ordering works on one shared key scale: timed items rank by their clock time,
 untimed items and trackers rank in bands above that, and a manual move stores
@@ -45,7 +46,9 @@ from app.recompute import recompute_tracker_state
 bp = Blueprint("dashboard", __name__)
 
 STALE_AFTER_DAYS = 7
-UPCOMING_DAYS = 5
+# a preview of the week ahead: enough to plan around, not a second agenda
+UPCOMING_DAYS = 7
+UPCOMING_PER_DAY = 3
 
 # default-order bands for the day list's shared key scale; times land in
 # 10000..11439 (10000 + minutes of the day), so the bands sit above them
@@ -189,16 +192,20 @@ def build_agenda(today: datetime.date) -> dict:
         )
     ]
 
-    upcoming_groups = [
-        {
-            "date": day,
-            "label": "Tomorrow"
-            if day == today + datetime.timedelta(days=1)
-            else day.strftime("%A %d.%m"),
-            "rows": rows,
-        }
-        for day, rows in sorted(upcoming.items())
-    ]
+    upcoming_groups: list[dict] = []
+    for day, rows in sorted(upcoming.items()):
+        # same key scale the day list uses, so the preview matches the day itself
+        rows.sort(key=effective_key)
+        upcoming_groups.append(
+            {
+                "date": day,
+                "label": "Tomorrow"
+                if day == today + datetime.timedelta(days=1)
+                else day.strftime("%A %d.%m"),
+                "rows": rows[:UPCOMING_PER_DAY],
+                "hidden": max(0, len(rows) - UPCOMING_PER_DAY),
+            }
+        )
 
     return {
         "overdue": overdue,

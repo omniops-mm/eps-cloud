@@ -699,6 +699,27 @@ button {
   margin: 1.1rem 0 0.3rem;
   padding-top: 0.8rem;
   border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.agenda-day-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.agenda-day-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+/* the count is a fact about the day, not a second heading */
+.agenda-day-more {
+  font-weight: 400;
+  white-space: nowrap;
 }
 
 .task-meta-danger {

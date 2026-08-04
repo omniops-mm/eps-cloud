@@ -1,8 +1,9 @@
-"""Route-level tests for the calendar and the day view.
+"""Route-level tests for the dashboard, the calendar and the day view.
 
 These cover the rules that are easy to break silently later: which tasks belong
-to a day, whether a day view knows it is not today, and that a tracker can be
-corrected after the fact. The recompute suite covers the counting itself.
+to a day, how far ahead the dashboard looks and how much of each day it shows,
+whether a day view knows it is not today, and that a tracker can be corrected
+after the fact. The recompute suite covers the counting itself.
 """
 
 import datetime
@@ -14,6 +15,7 @@ from app.clock import current_date, local_day_start_utc, utc_now, zone_name
 from app.db import db_session
 from app.models import StreakState, Task, TrackerEvent
 from app.preferences import grace_enabled, read
+from app.routes.dashboard import build_agenda
 from app.routes.journal import day_items
 
 from .conftest import Builder
@@ -24,6 +26,68 @@ def add_task(**kwargs: object) -> Task:
     db_session.add(task)
     db_session.flush()
     return task
+
+
+class TestUpcomingDays:
+    """The preview of the days ahead: how far it reaches, and how much it shows."""
+
+    def group_for(self, day: datetime.date) -> dict:
+        groups = build_agenda(current_date())["upcoming"]
+        return next(group for group in groups if group["date"] == day)
+
+    def test_a_day_shows_three_tasks_at_most(self, client: FlaskClient) -> None:
+        day = current_date() + datetime.timedelta(days=3)
+        for n in range(5):
+            add_task(name=f"task {n}", scheduled_for=day)
+
+        group = self.group_for(day)
+        assert len(group["rows"]) == 3
+        assert group["hidden"] == 2
+
+    def test_a_short_day_hides_nothing(self, client: FlaskClient) -> None:
+        day = current_date() + datetime.timedelta(days=3)
+        add_task(name="only one", scheduled_for=day)
+        assert self.group_for(day)["hidden"] == 0
+
+    def test_the_shown_tasks_are_that_days_first_ones(self, client: FlaskClient) -> None:
+        """Timed tasks outrank untimed ones, so the preview is not arbitrary."""
+        day = current_date() + datetime.timedelta(days=2)
+        add_task(name="afternoon", scheduled_for=day, scheduled_time=datetime.time(16, 0))
+        add_task(name="morning", scheduled_for=day, scheduled_time=datetime.time(8, 0))
+        add_task(name="whenever", scheduled_for=day)
+        add_task(name="also whenever", scheduled_for=day)
+
+        names = [row["task"].name for row in self.group_for(day)["rows"]]
+        assert names == ["morning", "afternoon", "whenever"]
+
+    def test_the_window_stops_after_a_week(self, client: FlaskClient) -> None:
+        """Seven days is the promise, so the number is spelled out here."""
+        today = current_date()
+        seventh = today + datetime.timedelta(days=7)
+        eighth = today + datetime.timedelta(days=8)
+        add_task(name="just inside", scheduled_for=seventh)
+        add_task(name="just outside", scheduled_for=eighth)
+
+        days = [group["date"] for group in build_agenda(today)["upcoming"]]
+        assert seventh in days
+        assert eighth not in days
+
+    def test_a_trimmed_day_says_how_many_it_is_holding_back(self, client: FlaskClient) -> None:
+        day = current_date() + datetime.timedelta(days=2)
+        for n in range(5):
+            add_task(name=f"task {n}", scheduled_for=day)
+        db_session.commit()
+
+        assert "+2 more" in client.get("/").get_data(as_text=True)
+
+    def test_each_heading_links_to_that_days_page(self, client: FlaskClient) -> None:
+        """The same destination the calendar cells use."""
+        day = current_date() + datetime.timedelta(days=2)
+        add_task(name="ahead", scheduled_for=day)
+        db_session.commit()
+
+        body = client.get("/").get_data(as_text=True)
+        assert f'href="/journal/{day.isoformat()}"' in body
 
 
 class TestCalendar:

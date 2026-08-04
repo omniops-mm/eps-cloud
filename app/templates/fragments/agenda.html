@@ -67,7 +67,11 @@
   {% endif %}
 
   {% for group in agenda.upcoming %}
-  <h3 class="agenda-day-label">{{ group.label }}</h3>
+  <h3 class="agenda-day-label">
+    <a class="agenda-day-link"
+       href="{{ url_for('journal.day', date=group.date.isoformat()) }}">{{ group.label }}</a>
+    {% if group.hidden %}<span class="agenda-day-more">+{{ group.hidden }} more</span>{% endif %}
+  </h3>
   <ul class="row-list">
     {% for row in group.rows %}
       {% with task = row.task, tomorrow = row.tomorrow, overdue_days = row.overdue_days,

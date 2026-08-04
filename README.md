@@ -231,4 +231,6 @@ This populates the database with roughly two months of example history. It can b
 
 MIT, see [LICENSE](LICENSE).
 
+The Space Grotesk typeface is not covered by that licence. It is bundled in `app/static/fonts/` and embedded in the diagrams under `docs/img/`, and is licensed separately under the SIL Open Font License 1.1. Its copyright notice and licence text are in [app/static/fonts/OFL.txt](app/static/fonts/OFL.txt).
+
 <div align="right"><a href="#top">back to top</a></div>

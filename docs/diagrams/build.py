@@ -5,6 +5,11 @@ Space Grotesk for display type, cards on a warm graphite plate. The font is
 subsetted to the characters these diagrams use and embedded as a data URI, so a
 diagram carries its own typeface instead of depending on the reader's machine.
 
+SpaceGrotesk-subset.woff2 is derived from app/static/fonts/SpaceGrotesk.woff2 and
+carries the same licence, the SIL Open Font License 1.1. The licence and copyright
+notice are in app/static/fonts/OFL.txt. The font declares no Reserved Font Name, so
+the subset keeps the original family name.
+
     python docs/diagrams/build.py
 """
 

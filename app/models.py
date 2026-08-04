@@ -1,7 +1,7 @@
 """All EPS tables. One pattern throughout: *_log tables are the append-only
 source of truth, *_state tables are derived caches rebuilt by the recompute
-functions. Never write to a _state table by hand. Reasoning: docs/decisions.md,
-entry 3."""
+functions. Never write to a _state table by hand: a _state row is disposable and
+gets thrown away on the next recompute, so an edit made there is lost."""
 
 import datetime
 import decimal

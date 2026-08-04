@@ -1,188 +1,210 @@
 <a id="top"></a>
 
-# EPS
+<p align="center">
+  <img src="docs/img/banner.svg" alt="EPS. A productivity webapp that assembles your day for you. Built with Python, Flask, HTMX, Postgres, Docker Compose, Ansible, Kubernetes, Terraform and AWS.">
+</p>
 
-**A productivity webapp that assembles your day for you, built one piece of infrastructure at a time.**
+<p align="center">
+  <a href="https://www.repostatus.org/#wip"><img src="https://www.repostatus.org/badges/latest/wip.svg" alt="Project Status: WIP"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+</p>
 
-[![Project Status: WIP](https://www.repostatus.org/badges/latest/wip.svg)](https://www.repostatus.org/#wip)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
-Python, Flask, HTMX, Postgres, Docker Compose, and, one version at a time, Ansible, Kubernetes, Terraform and AWS.
-
-> **Status: [v0.1.0](https://github.com/omniops-mm/eps-cloud/releases/tag/v0.1.0) is out.** Clone it, copy the env file, `docker compose up`, and it works. v0.2 is next: Ansible onto a real VM, which is where this stops being something that only runs on my machine. Anything described here that does not exist yet is marked where it comes up.
-
-<img alt="The dashboard: an agenda with an overdue block on top, then the day's events, tasks and trackers in one ordered list, with streaks, tracker schedules and latest metrics in a side column." src="docs/img/dashboard.png">
+**Version [v0.1.0](https://github.com/omniops-mm/eps-cloud/releases/tag/v0.1.0) has been released.** Cloning the repository, copying the environment file and running `docker compose up` is enough to build the images and serve the application. Version 0.2 moves the same stack onto a virtual machine using Ansible.
 
 ### Quick links
 
-[Why this exists](#why-this-exists) · [What it does](#what-it-does) · [What you track](#the-four-things-you-track) · [How it is built](#how-it-is-built) · [How the data works](#how-the-data-works) · [The ladder](#the-ladder) · [Scope and non-goals](#scope-and-non-goals) · [Running it](#running-it) · [Design decisions](docs/decisions.md)
+[Why this exists](#why-this-exists) · [How it works](#how-it-works) · [What the EPS tracks](#what-the-eps-tracks) · [Architecture](#architecture) · [The data model](#the-data-model) · [Roadmap](#roadmap) · [Running the application](#running-the-application)
 
 ---
 
 ## Why this exists
 
-I have gone through an insane amount of productivity applications, systems and methods in my attempts to increase the amount of work I could get done. Some have succeeded far more than others but they all shared the same fly in the ointment, in that the systems themselves require daily maintenance work in order for them to function.
+I have gone through an insane amount of productivity applications, systems and methods in my attempts to increase the amount of work I could get done. Some succeeded further than others, but they all shared the same fly in the ointment. The systems themselves require daily maintenance work in order to function.
 
-That maintenance is the whole problem. With an ordinary to-do list, a task occurs to you, you park it somewhere so you do not lose it, and then at some point you have to sit down and turn that pile into tomorrow's list. That sorting job lands on you every single day. Miss it once, because you were busy or tired or you simply forgot, and the backlog becomes its own separate job to dig out of. The longer it sits the harder it is to start again, and that is usually the point where a system quietly dies.
+That maintenance is the central problem. An ordinary to-do list requires you to build the following day's list yourself, and that task returns every single day. If it is skipped even once, the resulting backlog becomes a separate task in its own right. The burden grows the longer you use the system, which is what led to the eventual abandonment of each system.
 
-EPS moves that job into the software. You enter a task once, with whatever dates it carries, and the system assembles each day for you.
+<p align="center">
+  <img src="docs/img/maintenance-loop.svg" alt="On an ordinary to-do list you write a task down, build tomorrow's list, work on tasks, and whatever you missed piles up with the new tasks, which sends you back to building the list again. In the EPS you enter the task once, the EPS builds the list each day, and you do the work.">
+</p>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/failure-mode-dark.svg">
-  <img alt="A to-do list makes you build the list every day, so missing a day leaves a backlog. EPS builds the list for you, so missing a day leaves nothing to catch up on." src="docs/img/failure-mode-light.svg">
-</picture>
+The EPS moves that work into the software. A task is entered once, together with whatever dates it carries, and the system assembles each day on its own. The effort you spend goes into deciding what matters rather than into sorting. Streaks, recurring tasks, one-off tasks and daily metrics are configured once and are handled from that point onwards.
 
-The core idea is that you concentrate your effort on adding the important things you need to do while leaving all the maintenance work to the application itself. Habits, trackers, tasks, daily metrics. You set them up once and they are handled from then on. Less time spent deciding and more time spent doing.
+The current version of this system runs on Claude Cowork by Anthropic; I am essentially using an AI to organise my days. It works, but most of it is mechanical work that can be implemented programmatically. This project is that implementation.
 
-The current version of this system runs on Claude Cowork by Anthropic. I have essentially been using an AI to organise my days. That has worked, but a lot of it is machinery that could just be implemented programmatically, either directly or with a few tweaks. This project is my attempt to build that.
-
-One honest note about what this repository is. It is a learning project more than it is a product. I am using it as a substrate to practise for a career in DevOps and cloud engineering, which is why the version ladder below is built the way it is: each tag adds a real piece of infrastructure rather than shipping features.
+This repository is above all a learning project. I am using it as practice for a career in DevOps and cloud engineering, which is why the version roadmap below is built the way it is. Each step focuses more on adding layers of infrastructure rather than shipping features.
 
 <div align="right"><a href="#top">back to top</a></div>
 
 ---
 
-## What it does
+## How it works
 
-Single-user, server-rendered, and everything in this section exists and runs today. Three pages do almost all the work, and the [next section](#the-four-things-you-track) covers what goes on them.
+The EPS is intended to serve a single user and is rendered entirely on the server. The pages described below make up the user interface as of the current version.
 
-**The dashboard is where a day happens.** One list, in order: anything overdue pinned to the top, then the day itself. Calendar events, tasks with a time on them, vital tasks, ordinary tasks and any tracker that has come due all sit on that one list, in one order, with what you finished sinking to the bottom crossed out. The next few days wait in their own groups underneath. A "Plan the day" mode adds move buttons so you can put the list in the order you actually intend to do it, and overdue items stay pinned regardless, because reordering your way out of a missed deadline is not planning. A task you have not touched in over a week gets flagged and asks whether you still mean to do it. That question is what stops the list silently clogging up. Anything new goes in through the Add panel at the top: a task, a habit, a tracker or a metric, one panel, no admin pages to visit first. That is the page in the screenshot above.
+### Dashboard
 
-**The journal is where a day gets written down.** Habits marked kept or missed, trackers ticked off, the day's numbers entered on scale buttons or plain fields, and a freeform note that saves as you type. Nothing parses the note; it is for your future self. There is also a bad-day switch: mark a day bad and the habit boxes you did not tick stop counting as misses. Rough days happen, and losing a five-week streak to one of them teaches you nothing except to stop using the app.
+The dashboard is the main user interface provided to the user. It presents the current day as a single ordered list. Anything overdue comes first, followed by the day's calendar events, its tasks, and any recurring task that has become due. Completed items move to the bottom of the list and are struck through, and the days that follow are listed underneath in their own groups.
 
-<img alt="The journal for one day: habit rows with pass and fail marks, trackers, daily metrics with scale buttons, and a notes box with a bad-day toggle." src="docs/img/journal.png">
+A planning mode adds controls for reordering the list into the sequence you intend to work through. Overdue items are tasks that have not been done when they were planned. These float to the top and demand reorganisation from the user so that they may be marked done, deleted or rescheduled. Any task that has gone untouched for more than a week is flagged, and the interface asks whether it is still intended, which prevents the list from accumulating work that will never be done. Entries of every kind are created through a single panel at the top of the page.
 
-**The calendar reaches every other day.** A month grid where each day carries small marks, habits kept or missed, a note written, a day marked bad, and any day opens as it looked at the time. Past days also list the tasks that belonged to them, finished or not. Everything on a past day is editable, so a habit you forgot to tick three weeks ago is a two-click fix, every such edit lands in an audit log, and the streak numbers recompute on their own.
+<p align="center">
+  <img src="docs/img/dashboard.png" alt="The dashboard: an agenda with an overdue block on top, then the day's events, tasks and recurring items in one ordered list, with streaks, schedules and latest metrics in a side column.">
+</p>
 
-<img alt="A month grid. Each day cell shows a green or red dot for habits and a grey dot for notes, bad days are tinted red, and today is outlined." src="docs/img/calendar.png">
+### Journal
 
-A settings page holds the few global choices: the streak grace toggle, the forecast location, the daily fetch times and the timezone. Everything else is managed where you use it, so there are no admin pages to visit before you can start.
+The daily journal is what turns the EPS from a glorified to-do list into a daily companion. Within it, streaks are marked, recurring tasks are kept an eye on, metrics important to the user are recorded, and a note about the day is written. This allows for long-term tracking of anything important to the user, and provides the structure needed to improve any aspect of their life, provided they put in the daily effort.
 
-<div align="right"><a href="#top">back to top</a></div>
+<p align="center">
+  <img src="docs/img/journal.png" alt="The journal for one day: streak rows with pass and fail marks, recurring items, daily metrics with scale buttons, and a notes box with a bad-day toggle.">
+</p>
 
----
+### Calendar
 
-## The four things you track
+The calendar is the main way to navigate from day to day, so as to allow the viewing of days in the past and the future. Each cell in the month grid carries small markers indicating whether streaks were kept or missed, whether a note was written, and whether the day was marked as bad. Selecting a day opens it in the state it was in at the time, with a list of its tasks. Past days remain fully editable, so a streak that was not marked three weeks ago can be corrected in two clicks, after which the affected figures are recalculated.
 
-Four kinds of thing go into EPS, and each one exists because the others handle it badly. That is the whole taxonomy; there is no fifth.
+<p align="center">
+  <img src="docs/img/calendar.png" alt="A month grid. Each day cell shows a green or red dot for streaks and a grey dot for notes, bad days are tinted red, and today is outlined.">
+</p>
 
-**Streaks** are for forming good habits or minimising bad ones. Something you want to keep up daily, like sleeping on time, practising a skill, or drinking less coffee. Reach 7 days and you earn one free miss, which replenishes after another 7. That grace exists for things like staying under a calorie target, where an occasional splurge should not wipe out a month of progress. It can be turned off in settings for people who would rather the number be strict.
+### Settings
 
-**Trackers** are days-since-last-done counters for recurring chores. Doing the dishes, grocery shopping, watering the plants. You set a threshold and the tracker stays quiet until that many days have passed, then surfaces on the dashboard alongside your tasks. Trackers can be pinned to weekdays, so a weekly errand only appears on Fridays. A streak asks "did you do it today"; a tracker asks "how long has it been", and most recurring chores are the second question.
+The settings page holds a small number of choices that apply globally: the streak grace mechanic, the location used for the weather forecast, the times at which the daily fetches run, and the timezone. The options and methods for adjusting individual tasks were moved to where they are more convenient, for the sake of usability.
 
-**Tasks** carry dates, and that is the point of them. A deadline it must be done by, a scheduled date you intend to do it on, or a remind-after date that keeps it out of sight until it matters. The dashboard builds the day out of those dates, which is precisely the sorting work this project exists to take off you. Tasks are one-shot: anything that repeats is a tracker, not a task you keep recreating.
-
-**Daily metrics** are per-day numbers you define yourself, either a 1 to 5 scale for subjective ratings or a plain number with a unit. Sleep hours, mood, weight, steps, whatever you care about, rather than whichever three the developer decided to hardcode.
-
-Two smaller pieces sit underneath these. A **bad-day flag** per day, which stops unticked habits counting as misses on days that went badly. And an **audit log**, which records every change to past data, the table, the field, the old value and the new one, kept for 180 days. Nothing in the interface reads it yet; it exists so that editing history is never lossy, and as the foundation for showing that history later.
-
-The weather line on the dashboard comes from [BrightSky](https://brightsky.dev/), which is free and needs no key. Calendar events render on the dashboard and on past days, but nothing syncs a real calendar into them yet, so today they only appear if the seed script put them there.
-
-<div align="right"><a href="#top">back to top</a></div>
-
----
-
-## How it is built
-
-EPS runs as four containers, each with one job.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/topology-dark.svg">
-  <img alt="A browser reaches nginx over port 443. nginx is the only container published outside the private network and proxies to the web container on port 8000. A separate worker container takes no inbound traffic. Both web and worker talk to Postgres." src="docs/img/topology-light.svg">
-</picture>
-
-- **nginx** is the front door and the only container reachable from the outside. It serves the static files and passes everything else inward. TLS arrives in v0.2, together with the first deployment that has a public address worth encrypting.
-- **web** is the application itself: Flask running under gunicorn, with every page rendered on the server through Jinja2 templates. The interactive touches come from HTMX, so there is no separate frontend application to maintain.
-- **worker** runs the scheduled jobs in its own process rather than inside a web request: the morning weather prefetch and the nightly audit-log cleanup. Each job can also be invoked once by name from the command line, which is what a scheduled container elsewhere would call. Nothing connects to the worker; it only reaches out.
-- **Postgres** holds the data, accessed through SQLAlchemy, with every schema change applied as a versioned Alembic migration. Its files live on a named volume, so the data outlives the container.
-
-All four sit on a private network, and the only published port is nginx's. The why behind these picks, Flask over FastAPI, HTMX over a separate frontend, four containers rather than one or fifteen, lives in [the decisions notebook](docs/decisions.md).
-
-There is a fifth service, `migrate`, but it is not a fifth container in any lasting sense: it applies the Alembic migrations, exits, and reuses the web image rather than adding another one to build. Web and worker are not allowed to start until it has exited successfully. Schema changes get their own short-lived process because exactly one thing should apply them no matter how many web replicas are running, and because a migration that fails should leave you with a stack that refuses to start rather than one that comes up and serves errors against a half-built schema.
+<p align="center">
+  <img src="docs/img/settings.png" alt="The settings page: a streak forgiveness toggle, daily fetch times, weather location and timezone, laid out in four cards.">
+</p>
 
 <div align="right"><a href="#top">back to top</a></div>
 
 ---
 
-## How the data works
+## What the EPS tracks
 
-Every number EPS shows you, like a streak counter, is calculated from a permanent history rather than stored as the one true value.
+### Tasks
 
-Concretely: when you tick a habit checkbox, the app writes one small row into a log table saying this habit was done on this date. That log only ever grows; nothing in it gets overwritten. The streak count you see is then rebuilt by replaying the log from the start, and the rebuilt number lands in a summary table, which is what the dashboard actually reads.
+Tasks always carry a date, and that is what allows the software to assemble the day rather than leaving the work to you. A task can be scheduled for a particular day, given a deadline by which it has to be completed, or set to recur. A recurring task is one to which the EPS assigns a fresh deadline at a fixed interval, so that a chore due every four days reappears without having to be created again each time. Recurring tasks can additionally be restricted to particular weekdays, which allows a weekend errand to appear only on Saturday and Sunday, for example.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/model-c-dark.svg">
-  <img alt="Ticking a missed day adds one row to the habit_log history. The app replays the history and rebuilds the streak summary the dashboard reads, so the count corrects itself." src="docs/img/model-c-light.svg">
-</picture>
+### Streaks
 
-The reason for the two-step setup is editing the past. Open a day from three weeks ago, tick a box you forgot, and the app does exactly what it always does: write the row, rebuild the summary. Every day since your edit comes out right on its own, there is no separate edit-the-past feature, and the summary can never disagree with the history, because it is thrown away and recalculated on every change.
+Streaks cover the daily fundamentals, such as going to bed on time, staying off your phone for the first hour of the day, or reading a set number of pages. They are marked once a day, and the count records how long each one has been maintained. Because some of them are difficult to keep perfectly, an optional grace mechanic is available. Once a streak has reached seven days it survives a single missed day rather than resetting, and it can only do so once a week. This forgives an occasional lapse without concealing a habit that has genuinely been abandoned. The mechanic can be disabled entirely in the settings.
 
-More on why it is built this way, and what it was weighed against, in [the decisions notebook](docs/decisions.md).
+### Daily metrics and notes
+
+The journal is intended to take a minute or two before bed, and exists so that days can be compared against one another later. Alongside the written note it records metrics that you define yourself, such as mood, sleep quality, energy, weight or step count. Each metric is either a rating from one to five or a plain number with a unit attached. If the day went badly, marking it as such prevents the streaks left unmarked from being counted as failures.
+
+The weather shown on the dashboard is retrieved from [BrightSky](https://brightsky.dev/), which is free and requires no key. Calendar events are displayed on the dashboard and on past days, and synchronisation with an external calendar is planned for a later version.
 
 <div align="right"><a href="#top">back to top</a></div>
 
 ---
 
-## The ladder
+## Architecture
 
-Each version adds one real piece of infrastructure. The application barely changes across them, and that is on purpose. A small app deployed really well is the point, not a big app deployed badly.
+The EPS runs as four containers, each responsible for a single concern.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/ladder-dark.svg">
-  <img alt="A staircase rising left to right: v0.1 Compose done, v0.2 Ansible in progress, then v0.3 Kubernetes, v1.0 Terraform and v1.x EKS, planned." src="docs/img/ladder-light.svg">
-</picture>
+<p align="center">
+  <img src="docs/img/topology.svg" alt="A browser reaches nginx on port 80. nginx is the only container published outside the private network and proxies to the web container on port 8000. A separate worker container takes no inbound traffic. Both web and worker talk to Postgres, which keeps its files on a named volume.">
+</p>
 
-| Version | What it adds | What it is there to prove | Status |
-| --- | --- | --- | --- |
-| **v0.1** | The four containers under Compose. Multi-stage non-root Dockerfiles, pinned bases, a private network, healthchecks, a named Postgres volume. Alembic from the first commit. CI: ruff, mypy, pytest, build, gitleaks and Trivy. Images to GHCR by commit SHA. | That the application is actually built, containerised properly and tested, and that the security and observability threads start at the beginning rather than getting bolted on. | **Done**, tagged [v0.1.0](https://github.com/omniops-mm/eps-cloud/releases/tag/v0.1.0) |
-| **v0.2** | Ansible provisions a cheap VM, installs Docker, brings the Compose stack up, with secrets in Ansible Vault. | Configuration management, and it produces the first URL anyone can actually visit, months before there is a Kubernetes or AWS bill. | In progress |
-| **v0.3** | The Compose stack becomes Helm charts on a local kind cluster. NetworkPolicies, the worker's jobs as CronJobs, probes, resource limits, an HPA, ingress-nginx and cert-manager, a k6 load test that trips the autoscaler, and a local Prometheus and Grafana. | Kubernetes, built and broken locally for free. Raw manifests first to learn the primitives, then Helm to template them. | Planned |
-| **v1.0** | AWS through Terraform. A hand-rolled VPC with custom CIDR, public and private subnets across two AZs, IGW, NAT, route tables, security groups and NACLs. RDS, IAM, remote state on S3 with DynamoDB locking. CD through GitHub Actions authenticating by OIDC. tfsec or Checkov on the Terraform, Budgets and Infracost on the bill. | Infrastructure as code against a real cloud. The VPC is hand-rolled rather than taking the default-VPC shortcut, because the default VPC hides exactly the parts I am trying to learn. | Planned |
-| **v1.x** | The same Helm charts onto EKS behind an ALB. IRSA for keyless AWS access, Secrets Manager through the External Secrets Operator, Prometheus, Grafana, Alertmanager and Loki, deploys moved to ArgoCD, Pod Security Admission on top. | The capstone. Managed Kubernetes with the security and observability stories finished rather than sketched. | Planned |
+- **nginx** is the only container reachable from outside the private network. It serves the static files and passes every other request inward. TLS is introduced in version 0.2, together with the first deployment that has an address worth encrypting.
+- **web** is the application itself. It runs Flask under gunicorn and renders every page on the server through Jinja2 templates. HTMX provides the interactive behaviour, which removes the need for a separate frontend application.
+- **worker** executes the scheduled jobs in a process of its own rather than inside a web request. It retrieves the weather each morning and trims the audit log each night. Each job can also be invoked individually by name from the command line, which is what an external scheduler would call. No traffic is directed to the worker.
+- **Postgres** stores the data and is accessed through SQLAlchemy, with every schema change applied as a versioned Alembic migration. Its files are held on a named volume so that the data outlives the container.
 
-### The three threads
+All four containers share a private network, and nginx exposes the only published port.
 
-CI/CD, security and observability are not single rungs. They are threads that get thicker at every version.
+A fifth service, `migrate`, applies the migrations and then exits. It reuses the web image rather than requiring another one to be built, and neither web nor worker is permitted to start until it has exited successfully. Schema changes are given a dedicated short-lived process because exactly one process should apply them regardless of how many web replicas are running, and because a migration that fails should leave a stack that refuses to start rather than one that starts and then serves errors against an incomplete schema.
+
+<div align="right"><a href="#top">back to top</a></div>
+
+---
+
+## The data model
+
+Every value that the EPS displays is calculated from a permanent record of what has happened, rather than being stored directly as a single authoritative figure.
+
+When a streak is marked, the application appends one row to a log table stating that the streak was kept on that date. The log only ever grows, and none of its rows are overwritten. The count that appears on the dashboard is produced by replaying that log from the beginning, and the result is written into a summary table, which is what the interface actually reads.
+
+<p align="center">
+  <img src="docs/img/streak-rebuild.svg" alt="A streak counting 0, 1, 2, then dropping back to 0 on a day that was logged incorrectly, then 1, 2, with the chain broken either side of that day. Correcting the day makes the EPS replay the history, and the same six days now count 0, 1, 2, 3, 4, 5 with the chain intact.">
+</p>
+
+This arrangement is what makes the past editable. Opening a day from three weeks ago and marking a streak that was missed causes the application to do exactly what it always does: append the row, replay the log, and rebuild the summary. Every day following the correction is recalculated on its own. There is no separate mechanism for editing history, and the summary cannot disagree with the log, because it is discarded and recalculated on every change. The same applies to everything else that can be adjusted, so the system remains editable without ever falling out of step with itself.
+
+Every change made to past data is recorded in an audit log, which stores the table, the field, the previous value and the new one, and is retained for 180 days. Nothing in the interface reads it at present. It exists so that editing history is never lossy, and as the basis for presenting that history at a later point.
+
+The application is single-user throughout. Multi-user support is not a concern for version 1, and the settings table carries a constraint that enforces exactly one row.
+
+<div align="right"><a href="#top">back to top</a></div>
+
+---
+
+## Roadmap
+
+Each version adds one substantial piece of infrastructure. The application itself changes very little between them, which is deliberate. The objective is a small application deployed thoroughly rather than a large one deployed poorly.
+
+<p align="center">
+  <img src="docs/img/roadmap.svg" alt="Five versions on a track. v0.1, the four containers under Compose with CI, is done. v0.2, Ansible onto a VM, is in progress. v0.3 is Helm on a local kind cluster, v1.0 is AWS through Terraform, and v1.x is EKS.">
+</p>
+
+<!-- Written as HTML rather than a pipe table so the cells can carry valign="middle".
+     Without it the bullet lists sit at the top of each row and leave dead space under them. -->
+<table>
+<thead>
+<tr><th>Version</th><th>What it adds</th><th>Stack</th><th>Status</th></tr>
+</thead>
+<tbody>
+<tr>
+<td valign="middle"><b>v0.1</b></td>
+<td valign="middle"><ul><li>Four containers on a private network, with healthchecks and a named volume.</li><li>Schema changes applied as versioned migrations from the first commit.</li><li>Every push linted, type checked, tested, built and scanned.</li></ul></td>
+<td valign="middle">Docker Compose, Alembic, GitHub Actions, ruff, mypy, pytest, gitleaks, Trivy, GHCR</td>
+<td valign="middle"><b>Done</b></td>
+</tr>
+<tr>
+<td valign="middle"><b>v0.2</b></td>
+<td valign="middle"><ul><li>The stack moved onto a virtual machine.</li><li>That machine provisioned from nothing by a playbook.</li><li>Secrets held in encrypted storage.</li></ul></td>
+<td valign="middle">Ansible, Ansible Vault</td>
+<td valign="middle">In progress</td>
+</tr>
+<tr>
+<td valign="middle"><b>v0.3</b></td>
+<td valign="middle"><ul><li>The same stack expressed as Kubernetes workloads on a local cluster.</li><li>The worker's jobs turned into CronJobs.</li><li>A load test used to drive the autoscaler.</li></ul></td>
+<td valign="middle">kind, Helm, NetworkPolicies, probes, HPA, ingress-nginx, cert-manager, k6, Prometheus, Grafana</td>
+<td valign="middle">Planned</td>
+</tr>
+<tr>
+<td valign="middle"><b>v1.0</b></td>
+<td valign="middle"><ul><li>Cloud infrastructure defined as code.</li><li>A network built by hand rather than taken from the default, with public and private subnets across two availability zones.</li><li>A managed database, and a deployment that authenticates without stored credentials.</li></ul></td>
+<td valign="middle">Terraform, AWS VPC, RDS, IAM, S3, DynamoDB, GitHub Actions OIDC, tfsec, Budgets, Infracost</td>
+<td valign="middle">Planned</td>
+</tr>
+<tr>
+<td valign="middle"><b>v1.x</b></td>
+<td valign="middle"><ul><li>The same Helm charts deployed onto managed Kubernetes.</li><li>The handling of secrets, monitoring and deployment completed rather than outlined.</li></ul></td>
+<td valign="middle">EKS, ALB, IRSA, External Secrets, Secrets Manager, ArgoCD, Prometheus, Grafana, Alertmanager, Loki, Pod Security Admission</td>
+<td valign="middle">Planned</td>
+</tr>
+</tbody>
+</table>
+
+### Security, Observability, CI/CD
+
+Security, observability and the setting up of CI/CD pipelines are all things that I wanted to implement into this project. They are, however, not things that one builds in a particular version and is then done with. They are fundamental practices that exist throughout the entire development process, and thus need to be applied at every stage.
 
 | Thread | v0.1 | v0.3 local k8s | v1.0 AWS | v1.x EKS |
 | --- | --- | --- | --- | --- |
-| **CI/CD** | lint, test, build, scan | charts tested in CI | push-based deploy plus smoke tests | GitOps with ArgoCD |
-| **Security** | gitleaks, `.env` hygiene, Trivy | NetworkPolicies, K8s secrets | tfsec, least-privilege IAM, Secrets Manager | IRSA, External Secrets, Pod Security Admission |
+| **CI/CD** | lint, type check, test, build, scan, publish by commit SHA | charts tested in CI | push-based deploy with smoke tests | GitOps with ArgoCD |
+| **Security** | gitleaks, non-root images, pinned bases, Trivy, secrets kept out of git | NetworkPolicies, Kubernetes Secrets | tfsec, least-privilege IAM, Secrets Manager | IRSA, External Secrets, Pod Security Admission |
 | **Observability** | JSON logs, `/metrics`, `/healthz`, `/readyz` | Prometheus and Grafana on kind | CloudWatch for the AWS pieces | Prometheus, Grafana, Alertmanager, Loki |
 
-v0.2 mostly inherits the v0.1 threads with Ansible Vault added. One prerequisite is worth calling out: the structured logging and the `/metrics` endpoint go into the application back at v0.1, even though no dashboard or alert consumes them until much later. Logs you can query later only exist if the app emits them properly from the start.
-
-### Secrets
-
-The rule is the same the whole way up: code in git, secret values never. Raw Kubernetes Secrets do not count as secure on their own, since base64 is encoding and not encryption, so a value never gets written into a manifest. It gets pulled from somewhere encrypted.
-
-v0.1 uses a gitignored `.env` read through a single settings object, with `.env.example` committed so the required shape is documented, and gitleaks in the pre-commit hook so nothing leaks by accident. v0.2 moves to Ansible Vault. v0.3 uses a plain Kubernetes Secret and says so openly in a decision record as the known-weak version that gets replaced later, because the upgrade is part of the story. v1.0 moves to AWS Secrets Manager with KMS. v1.x pulls from Secrets Manager into the cluster through the External Secrets Operator, authenticated by IRSA.
+At the moment, version 0.2 mostly inherits everything from version 0.1, with the additional usage of Ansible Vault. For the observability track in version 0.1, emphasis was put on ensuring that logs at points of failure were generated and available in the right format, so as to ease the development of dashboards and more later.
 
 <div align="right"><a href="#top">back to top</a></div>
 
 ---
 
-## Scope and non-goals
-
-This is optimised for learning, which means it deliberately takes the long route in places where a shortcut existed. It should not be read as production-ready software, and it is not trying to be a product you would adopt.
-
-Things deliberately left out, and why:
-
-- **No systemd-on-bare-metal rung and no multi-distro Bash bootstrap.** A container does not care what host it runs on, so scripting a hand-installed VM spends effort proving a problem containers already solved.
-- **No Terraform against a local VM.** Using Terraform to spin up a libvirt box just to run Docker on it teaches nothing that the AWS rung does not teach better. Terraform shows up where it is load-bearing.
-- **No Kustomize.** Helm covers the templating. Authoring both for a four-tier app is padding.
-- **No service mesh.** Istio on a single-user four-tier application is textbook over-engineering.
-- **No blue-green or canary deploys.** There is no traffic to canary. The rolling-update default plus one paragraph of reasoning answers the question honestly.
-- **No distributed tracing and no separate status page.** Tracing a mostly-synchronous single-user request path is a great deal of work for almost nothing, and a Grafana panel covers the other.
-- **No LLM anywhere in the application.** A structured input UI replaces fuzzy parsing. The irony of that, given where this system currently lives, is not lost on me.
-
-Single-user throughout. Multi-user is not a v1 concern and the settings table has a constraint enforcing exactly one row.
-
-<div align="right"><a href="#top">back to top</a></div>
-
----
-
-## Running it
+## Running the application
 
 ```bash
 git clone https://github.com/omniops-mm/eps-cloud.git
@@ -191,59 +213,17 @@ cp .env.example .env      # then fill in the values it asks for
 docker compose up
 ```
 
-That is the v0.1 done-line, stated as user documentation on purpose so there is no room to move the goalposts later. The first run builds the images, applies the migrations and serves the dashboard on port 80. You start with an empty system. If you would rather look around a lived-in one first:
+The first run builds the images, applies the migrations and serves the dashboard on port 80. The system starts empty.
+
+An example database can be loaded instead, for anyone who would rather see the application with data already in it:
 
 ```bash
 docker compose run --rm web python seed.py
 ```
 
-That fills the database with a couple of months of example history, safe to run repeatedly and safe to delete from.
+This populates the database with roughly two months of example history. It can be run repeatedly, and its data can be deleted safely.
 
 <div align="right"><a href="#top">back to top</a></div>
-
----
-
-## Continuous integration
-
-Every push and every pull request runs linting (ruff), type checking (mypy) and the test suite. A fourth job starts a real Postgres and walks every migration up, checks that the models and the migrations still describe the same schema, then walks every migration back down, because a downgrade nobody has ever run is a downgrade that does not work, and the moment you find that out is the worst one available.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/ci-dark.svg">
-  <img alt="On every push: lint with ruff and mypy, run the pytest suite and the migrations against a real Postgres, build the three images and scan them with Trivy, then publish to GHCR tagged by commit SHA." src="docs/img/ci-light.svg">
-</picture>
-
-Only when all of that is green do the images get built, and the order within that job matters: each image is built into the runner, scanned by Trivy, and published only after the scan. Building, pushing and then scanning would mean a vulnerable image is already public while the scanner is still reading it. The full findings land in the repository's Security tab at every severity; the build itself fails only on critical vulnerabilities that already have a fix, since an unfixable problem in a base image should not block unrelated work. Pushes to master publish to GHCR.
-
-Two details worth pointing out. Images are tagged by commit SHA rather than `latest`, so any running container can be traced back to the exact source that produced it. And dependencies are locked, not floated, so a build in November installs exactly what a build in July installed. A vulnerability scan only means something when you know precisely what is inside the image.
-
-<div align="right"><a href="#top">back to top</a></div>
-
----
-
-## Repository layout
-
-One application, deployed progressively more seriously. The directories below arrive with the version that needs them, rather than sitting empty from the start.
-
-```
-app/          the Flask application: routes, templates, models, recompute
-worker/       the scheduler and its jobs
-alembic/      migrations, from the first commit
-tests/        pytest suite
-docs/         decisions, diagrams
-seed.py       example data for a fresh install
-compose.yml   v0.1 lives here
-deploy/       ansible (v0.2), helm (v0.3), terraform (v1.0), added as they arrive
-```
-
-There is no second copy of the application per version. The point of this project is that the app stays still while the infrastructure around it gets serious, and five forked copies of `app/` would contradict that. Version history lives in git tags and releases.
-
-<div align="right"><a href="#top">back to top</a></div>
-
----
-
-## Design decisions
-
-Notes on each real decision, what it was weighed against and what it costs, are in **[docs/decisions.md](docs/decisions.md)**. It is more of a notebook than official documentation. A plain list of technologies would not say much on its own; the reasoning is the interesting part, and writing it down is how I keep hold of it months later.
 
 ---
 

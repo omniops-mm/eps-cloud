@@ -20,4 +20,4 @@ COPY seed.py ./seed.py
 ENV PATH="/app/.venv/bin:$PATH"
 USER eps
 EXPOSE 8000
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--access-logfile", "-", "app:create_app()"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "--access-logfile", "-", "app:create_app()"]

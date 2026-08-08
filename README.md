@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 
-**Version [v0.1.0](https://github.com/omniops-mm/eps-cloud/releases/tag/v0.1.0) has been released.** Cloning the repository, copying the environment file and running `docker compose up` is enough to build the images and serve the application. Version 0.2 moves the same stack onto a virtual machine using Ansible.
+**Version [v0.1.0](https://github.com/omniops-mm/eps-cloud/releases/tag/v0.1.0) has been released.** Cloning the repository, copying the environment file and running `docker compose up` is enough to build the images and serve the application. Version 0.2 adds the observability layer: Prometheus and Grafana watching the running stack.
 
 ### Quick links
 
@@ -93,7 +93,7 @@ Streaks cover the daily fundamentals, such as going to bed on time, staying off 
 
 The journal is intended to take a minute or two before bed, and exists so that days can be compared against one another later. Alongside the written note it records metrics that you define yourself, such as mood, sleep quality, energy, weight or step count. Each metric is either a rating from one to five or a plain number with a unit attached. If the day went badly, marking it as such prevents the streaks left unmarked from being counted as failures.
 
-The weather shown on the dashboard is retrieved from [BrightSky](https://brightsky.dev/), which is free and requires no key. Calendar events are displayed on the dashboard and on past days, and synchronisation with an external calendar is planned for a later version.
+The weather shown on the dashboard is retrieved from [BrightSky](https://brightsky.dev/), which is free and requires no key. Calendar events are displayed on the dashboard and on past days.
 
 <div align="right"><a href="#top">back to top</a></div>
 
@@ -107,7 +107,7 @@ The EPS runs as four containers, each responsible for a single concern.
   <img src="docs/img/topology.svg" alt="A browser reaches nginx on port 80. nginx is the only container published outside the private network and proxies to the web container on port 8000. A separate worker container takes no inbound traffic. Both web and worker talk to Postgres, which keeps its files on a named volume.">
 </p>
 
-- **nginx** is the only container reachable from outside the private network. It serves the static files and passes every other request inward. TLS is introduced in version 0.2, together with the first deployment that has an address worth encrypting.
+- **nginx** is the only container reachable from outside the private network. It serves the static files and passes every other request inward. TLS is introduced in version 0.3, where this container's role passes to the Kubernetes ingress controller.
 - **web** is the application itself. It runs Flask under gunicorn and renders every page on the server through Jinja2 templates. HTMX provides the interactive behaviour, which removes the need for a separate frontend application.
 - **worker** executes the scheduled jobs in a process of its own rather than inside a web request. It retrieves the weather each morning and trims the audit log each night. Each job can also be invoked individually by name from the command line, which is what an external scheduler would call. No traffic is directed to the worker.
 - **Postgres** stores the data and is accessed through SQLAlchemy, with every schema change applied as a versioned Alembic migration. Its files are held on a named volume so that the data outlives the container.
@@ -145,7 +145,7 @@ The application is single-user throughout. Multi-user support is not a concern f
 Each version adds one substantial piece of infrastructure. The application itself changes very little between them, which is deliberate. The objective is a small application deployed thoroughly rather than a large one deployed poorly.
 
 <p align="center">
-  <img src="docs/img/roadmap.svg" alt="Five versions on a track. v0.1, the four containers under Compose with CI, is done. v0.2, Ansible onto a VM, is in progress. v0.3 is Helm on a local kind cluster, v1.0 is AWS through Terraform, and v1.x is EKS.">
+  <img src="docs/img/roadmap.svg" alt="Seven versions on a track. v0.1, the four containers under Compose with CI, is done. v0.2 adds Prometheus and Grafana over the running stack. v0.3 moves the stack onto Kubernetes. v0.4 adds pull-based deployment with ArgoCD and a private production machine. v0.5 builds that machine from code with Terraform and Ansible. v1.0 lifts the design onto AWS, and v1.x swaps the cluster for EKS.">
 </p>
 
 <!-- Written as HTML rather than a pipe table so the cells can carry valign="middle".
@@ -163,26 +163,38 @@ Each version adds one substantial piece of infrastructure. The application itsel
 </tr>
 <tr>
 <td valign="middle"><b>v0.2</b></td>
-<td valign="middle"><ul><li>The stack moved onto a virtual machine.</li><li>That machine provisioned from nothing by a playbook.</li><li>Secrets held in encrypted storage.</li></ul></td>
-<td valign="middle">Ansible, Ansible Vault</td>
-<td valign="middle">In progress</td>
+<td valign="middle"><ul><li>Prometheus scraping the application, the worker, the database and the containers.</li><li>Grafana dashboards and alert rules stored in the repository, so a fresh <code>compose up</code> rebuilds them.</li><li>Alert rules covering an unreachable application and scheduled jobs that stop running.</li></ul></td>
+<td valign="middle">Prometheus, Grafana, Alertmanager, postgres_exporter, cAdvisor</td>
+<td valign="middle"><b>Next</b></td>
 </tr>
 <tr>
 <td valign="middle"><b>v0.3</b></td>
-<td valign="middle"><ul><li>The same stack expressed as Kubernetes workloads on a local cluster.</li><li>The worker's jobs turned into CronJobs.</li><li>A load test used to drive the autoscaler.</li></ul></td>
-<td valign="middle">kind, Helm, NetworkPolicies, probes, HPA, ingress-nginx, cert-manager, k6, Prometheus, Grafana</td>
+<td valign="middle"><ul><li>The same stack expressed as Kubernetes workloads on a local cluster.</li><li>The worker's jobs turned into CronJobs, network policy between the tiers, and TLS at the ingress.</li><li>A load test used to drive the autoscaler.</li></ul></td>
+<td valign="middle">k3d, Helm, NetworkPolicies, probes, HPA, ingress-nginx, cert-manager, k6</td>
+<td valign="middle">Planned</td>
+</tr>
+<tr>
+<td valign="middle"><b>v0.4</b></td>
+<td valign="middle"><ul><li>A private virtual machine as the production environment, with the local cluster kept for development.</li><li>Pull-based deployment: the cluster pulls its state from git, and CI holds no credentials for it.</li><li>Monitoring and log aggregation moved onto the cluster. Images signed and shipped with a software bill of materials.</li></ul></td>
+<td valign="middle">k3s, ArgoCD, kube-prometheus-stack, Loki, cosign, Pod Security Admission</td>
+<td valign="middle">Planned</td>
+</tr>
+<tr>
+<td valign="middle"><b>v0.5</b></td>
+<td valign="middle"><ul><li>The production machine created by Terraform and configured and hardened by Ansible.</li><li>The machine destroyed and rebuilt from the repository, to prove nothing on it was set up by hand.</li></ul></td>
+<td valign="middle">Terraform, Ansible, Ansible Vault</td>
 <td valign="middle">Planned</td>
 </tr>
 <tr>
 <td valign="middle"><b>v1.0</b></td>
-<td valign="middle"><ul><li>Cloud infrastructure defined as code.</li><li>A network built by hand rather than taken from the default, with public and private subnets across two availability zones.</li><li>A managed database, and a deployment that authenticates without stored credentials.</li></ul></td>
-<td valign="middle">Terraform, AWS VPC, RDS, IAM, S3, DynamoDB, GitHub Actions OIDC, tfsec, Budgets, Infracost</td>
+<td valign="middle"><ul><li>The same design on AWS: a network built by hand rather than taken from the default, with public and private subnets across two availability zones.</li><li>The database moved to a managed service, and a deployment that authenticates without stored credentials.</li><li>Infrastructure brought up for each working session and destroyed at the end of it, with budget alarms from the start.</li></ul></td>
+<td valign="middle">Terraform, AWS VPC, EC2, RDS, IAM, S3, DynamoDB, GitHub Actions OIDC, tfsec, Budgets, Infracost</td>
 <td valign="middle">Planned</td>
 </tr>
 <tr>
 <td valign="middle"><b>v1.x</b></td>
-<td valign="middle"><ul><li>The same Helm charts deployed onto managed Kubernetes.</li><li>The handling of secrets, monitoring and deployment completed rather than outlined.</li></ul></td>
-<td valign="middle">EKS, ALB, IRSA, External Secrets, Secrets Manager, ArgoCD, Prometheus, Grafana, Alertmanager, Loki, Pod Security Admission</td>
+<td valign="middle"><ul><li>The cluster swapped for managed Kubernetes behind a load balancer.</li><li>Pods with keyless access to AWS, and secrets pulled from a managed store instead of being held in the cluster.</li></ul></td>
+<td valign="middle">EKS, ALB, IRSA, External Secrets, Secrets Manager</td>
 <td valign="middle">Planned</td>
 </tr>
 </tbody>
@@ -192,13 +204,17 @@ Each version adds one substantial piece of infrastructure. The application itsel
 
 Security, observability and the setting up of CI/CD pipelines are all things that I wanted to implement into this project. They are, however, not things that one builds in a particular version and is then done with. They are fundamental practices that exist throughout the entire development process, and thus need to be applied at every stage.
 
-| Thread | v0.1 | v0.3 local k8s | v1.0 AWS | v1.x EKS |
-| --- | --- | --- | --- | --- |
-| **CI/CD** | lint, type check, test, build, scan, publish by commit SHA | charts tested in CI | push-based deploy with smoke tests | GitOps with ArgoCD |
-| **Security** | gitleaks, non-root images, pinned bases, Trivy, secrets kept out of git | NetworkPolicies, Kubernetes Secrets | tfsec, least-privilege IAM, Secrets Manager | IRSA, External Secrets, Pod Security Admission |
-| **Observability** | JSON logs, `/metrics`, `/healthz`, `/readyz` | Prometheus and Grafana on kind | CloudWatch for the AWS pieces | Prometheus, Grafana, Alertmanager, Loki |
+| Version | CI/CD | Security | Observability |
+| --- | --- | --- | --- |
+| **v0.1** | lint, type check, test, build, scan, publish by commit SHA | gitleaks, non-root images, pinned bases, Trivy, secrets kept out of git | JSON logs, `/metrics`, `/healthz`, `/readyz` |
+| **v0.2** | dashboards and alert rules provisioned from the repository | metrics endpoint hidden at the proxy | Prometheus, Grafana, Alertmanager |
+| **v0.3** | charts linted and templated in CI | NetworkPolicies, TLS at the ingress | k6 load test driving the autoscaler |
+| **v0.4** | pull-based CD: the cluster syncs itself from git | image signing, SBOM, Pod Security Admission | kube-prometheus-stack, Loki, synthetic probes |
+| **v0.5** | the playbook proven idempotent, ansible-lint in CI | host hardening: ssh lockdown, firewall, unattended upgrades, Vault | database backups on a timer, with the restore rehearsed |
+| **v1.0** | deploys authenticate through OIDC, no long-lived keys | tfsec, least-privilege IAM | CloudWatch for the AWS pieces |
+| **v1.x** | GitOps against EKS | IRSA, External Secrets | the same stack carried onto EKS |
 
-At the moment, version 0.2 mostly inherits everything from version 0.1, with the additional usage of Ansible Vault. For the observability track in version 0.1, emphasis was put on ensuring that logs at points of failure were generated and available in the right format, so as to ease the development of dashboards and more later.
+One piece of deliberate sequencing is worth naming: the structured logs and the metrics endpoint went into the application at version 0.1, before anything existed to read them. Telemetry only accumulates from the moment it is emitted, so the application was instrumented first and the dashboards come second.
 
 <div align="right"><a href="#top">back to top</a></div>
 
@@ -222,6 +238,14 @@ docker compose run --rm web python seed.py
 ```
 
 This populates the database with roughly two months of example history. It can be run repeatedly, and its data can be deleted safely.
+
+Removing the application is one command, since nothing is installed outside of Docker:
+
+```bash
+docker compose down -v    # stops and removes the containers, the network and the database volume
+```
+
+Adding `--rmi all` removes the built images as well, which returns the machine to the state it was in before the clone.
 
 <div align="right"><a href="#top">back to top</a></div>
 

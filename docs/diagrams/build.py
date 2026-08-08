@@ -408,29 +408,45 @@ STOPS = [
     ),
     (
         "v0.2",
-        ["Ansible provisions a virtual", "machine and brings the stack", "up on it."],
-        "In progress",
+        ["Prometheus and Grafana turn", "the telemetry into dashboards", "and alerts."],
+        "Next",
         ACCENT,
     ),
     (
         "v0.3",
         [
             "The stack becomes Helm charts",
-            "on a local kind cluster, with",
-            "Prometheus and Grafana.",
+            "on a local cluster, load-tested",
+            "until it autoscales.",
+        ],
+        "Planned",
+        None,
+    ),
+    (
+        "v0.4",
+        ["A private machine becomes", "production, and ArgoCD deploys", "it straight from git."],
+        "Planned",
+        None,
+    ),
+    (
+        "v0.5",
+        [
+            "Terraform creates that machine",
+            "and Ansible configures it,",
+            "rebuildable from nothing.",
         ],
         "Planned",
         None,
     ),
     (
         "v1.0",
-        ["Terraform builds a VPC, RDS", "and IAM on AWS, none of it", "taken from the defaults."],
+        ["The same design on AWS: a", "hand-built VPC, RDS and IAM,", "used and then destroyed."],
         "Planned",
         None,
     ),
     (
         "v1.x",
-        ["The same charts run on EKS,", "with ArgoCD, Loki and", "External Secrets."],
+        ["The cluster swapped for EKS,", "with keyless AWS access and", "managed secrets."],
         "Planned",
         None,
     ),
@@ -439,20 +455,27 @@ STOPS = [
 
 def roadmap() -> str:
     b = []
-    centres = [120, 310, 500, 690, 880]
-    bar_y = 120
-    here = 215  # between the finished rung and the one being built
+    # seven stops will not fit one row at a readable size, so the track snakes:
+    # four stops left to right, a turn down the right edge, three stops right to left
+    row1 = [130, 370, 610, 850]
+    row2 = [790, 500, 210]
+    bar1, bar2 = 120, 420
+    here = 250  # between the finished rung and the one being built
 
     # the track reads as a status bar: green up to the rung that is finished, brand
     # colour for the one being built, plain border for everything still ahead
+    b.append(f'<rect x="36" y="{bar1 - 5}" width="{row1[0] - 36}" height="10" rx="5" fill="{OK}"/>')
     b.append(
-        f'<rect x="36" y="{bar_y - 5}" width="{centres[0] - 36}" height="10" rx="5" fill="{OK}"/>'
+        f'<rect x="{row1[0]}" y="{bar1 - 5}" width="{here - row1[0]}" height="10" fill="{ACCENT}"/>'
     )
+    b.append(f'<rect x="{here}" y="{bar1 - 5}" width="{920 - here}" height="10" fill="{BORDER}"/>')
+    # the turn: out to the right edge, down, and back in to the second row
     b.append(
-        f'<rect x="{centres[0]}" y="{bar_y - 5}" width="{here - centres[0]}" height="10" fill="{ACCENT}"/>'
+        f'<path d="M920,{bar1} Q964,{bar1} 964,{bar1 + 44} V{bar2 - 44} Q964,{bar2} 920,{bar2}" '
+        f'fill="none" stroke="{BORDER}" stroke-width="10"/>'
     )
-    b.append(f'<rect x="{here}" y="{bar_y - 5}" width="{946 - here}" height="10" fill="{BORDER}"/>')
-    b.append(f'<path d="M946,{bar_y - 13} L978,{bar_y} L946,{bar_y + 13} Z" fill="{BORDER}"/>')
+    b.append(f'<rect x="90" y="{bar2 - 5}" width="{920 - 90}" height="10" fill="{BORDER}"/>')
+    b.append(f'<path d="M90,{bar2 - 13} L58,{bar2} L90,{bar2 + 13} Z" fill="{BORDER}"/>')
 
     # "we are here", pinned to the track just past v0.1
     b.append(
@@ -462,41 +485,48 @@ def roadmap() -> str:
         f'fill="{BG}">We are here</text>'
     )
 
-    for cx, (name, lines, status, tone) in zip(centres, STOPS):
-        # the stop itself
-        fill, edge = (tone, tone) if tone else (RAISED, BORDER_STRONG)
-        b.append(
-            f'<circle cx="{cx}" cy="{bar_y}" r="13" fill="{fill}" stroke="{BG}" stroke-width="4"/>'
-        )
-        b.append(
-            f'<circle cx="{cx}" cy="{bar_y}" r="13" fill="none" stroke="{edge}" stroke-width="2"/>'
-        )
-        b.append(
-            f'<line x1="{cx}" y1="{bar_y + 15}" x2="{cx}" y2="160" stroke="{BORDER}" stroke-width="2"/>'
-        )
-
-        b.append(card(cx - 84, 160, 168, 162))
-        b.append(
-            f'<text class="d" x="{cx}" y="188" text-anchor="middle" font-size="21" font-weight="600" '
-            f'fill="{tone or TEXT}">{name}</text>'
-        )
-        for i, line in enumerate(lines):
+    rows = [(row1, bar1, 160, STOPS[:4]), (row2, bar2, 460, STOPS[4:])]
+    for centres, bar_y, card_y, stops in rows:
+        for cx, (name, lines, status, tone) in zip(centres, stops):
+            # the stop itself
+            fill, edge = (tone, tone) if tone else (RAISED, BORDER_STRONG)
             b.append(
-                f'<text x="{cx}" y="{218 + i * 19}" text-anchor="middle" font-size="12.5" fill="{MUTED}">{line}</text>'
+                f'<circle cx="{cx}" cy="{bar_y}" r="13" fill="{fill}" stroke="{BG}" stroke-width="4"/>'
+            )
+            b.append(
+                f'<circle cx="{cx}" cy="{bar_y}" r="13" fill="none" stroke="{edge}" stroke-width="2"/>'
+            )
+            b.append(
+                f'<line x1="{cx}" y1="{bar_y + 15}" x2="{cx}" y2="{card_y}" stroke="{BORDER}" stroke-width="2"/>'
             )
 
-        if tone:
-            b.append(chip(cx, 296, status, fg=tone, bg=f"{tone}1f", edge="none", size=12.5))
-        else:
-            b.append(chip(cx, 296, status, size=12.5))
+            b.append(card(cx - 84, card_y, 168, 162))
+            b.append(
+                f'<text class="d" x="{cx}" y="{card_y + 28}" text-anchor="middle" font-size="21" '
+                f'font-weight="600" fill="{tone or TEXT}">{name}</text>'
+            )
+            for i, line in enumerate(lines):
+                b.append(
+                    f'<text x="{cx}" y="{card_y + 58 + i * 19}" text-anchor="middle" font-size="12.5" fill="{MUTED}">{line}</text>'
+                )
+
+            if tone:
+                b.append(
+                    chip(cx, card_y + 136, status, fg=tone, bg=f"{tone}1f", edge="none", size=12.5)
+                )
+            else:
+                b.append(chip(cx, card_y + 136, status, size=12.5))
 
     return svg(
         1000,
-        356,
-        "The version roadmap, left to right",
-        "Five versions on a track. v0.1, the four containers under Compose with CI, is done. "
-        "v0.2, Ansible onto a VM, is in progress and is where the project currently stands. "
-        "v0.3 is Helm on a local kind cluster, v1.0 is AWS through Terraform, and v1.x is EKS.",
+        660,
+        "The version roadmap, a track over two rows",
+        "Seven versions on a track that snakes over two rows. v0.1, the four containers under "
+        "Compose with CI, is done. v0.2, Prometheus and Grafana over the running stack, is next "
+        "and is where the project stands. v0.3 moves the stack onto Kubernetes, v0.4 adds "
+        "pull-based deployment with ArgoCD and a private production machine, v0.5 builds that "
+        "machine from code with Terraform and Ansible, v1.0 lifts the design onto AWS, and "
+        "v1.x swaps the cluster for EKS.",
         "".join(b),
     )
 

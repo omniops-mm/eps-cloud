@@ -19,6 +19,7 @@ from collections.abc import Callable, Iterator
 from typing import Any, cast
 
 import structlog
+from prometheus_client import Counter, Gauge, Histogram
 from sqlalchemy import CursorResult, delete
 from sqlalchemy.orm import Session
 
@@ -35,6 +36,26 @@ AUDIT_RETENTION_DAYS = 180
 
 # how far ahead the forecast is warmed, so opening the app never waits on a fetch
 WEATHER_LOOKAHEAD_DAYS = 7
+
+# Measurements for the jobs, defined beside them so a job and its numbers move
+# together. The gauge is what the staleness alert reads.
+JOB_RUNS = Counter(
+    "eps_job_runs_total",
+    "Job runs, by job and how they ended.",
+    ["job", "outcome"],
+)
+
+JOB_DURATION = Histogram(
+    "eps_job_duration_seconds",
+    "How long a job took to run.",
+    ["job"],
+)
+
+JOB_LAST_SUCCESS = Gauge(
+    "eps_job_last_success_timestamp_seconds",
+    "When each job last finished without error, in unix seconds.",
+    ["job"],
+)
 
 
 @contextlib.contextmanager
@@ -105,8 +126,15 @@ JOBS: dict[str, Callable[[Session], int]] = {
 def run(name: str) -> int:
     """Run one job by name in its own session, and say what it did."""
     job = JOBS[name]
-    with session_scope() as session:
-        touched = job(session)
+    with JOB_DURATION.labels(name).time():
+        try:
+            with session_scope() as session:
+                touched = job(session)
+        except Exception:
+            JOB_RUNS.labels(name, "error").inc()
+            raise
+    JOB_RUNS.labels(name, "ok").inc()
+    JOB_LAST_SUCCESS.labels(name).set_to_current_time()
     log.info("job finished", job=name, rows=touched)
     return touched
 

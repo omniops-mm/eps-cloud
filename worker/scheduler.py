@@ -16,6 +16,7 @@ import datetime
 import structlog
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
+from prometheus_client import start_http_server
 
 from app.clock import zone
 from app.logging import configure_logging
@@ -27,6 +28,9 @@ log = structlog.get_logger("worker")
 # no setting owns this one; it runs when nobody is using the app
 AUDIT_CLEANUP_TIME = datetime.time(3, 0)
 DEFAULT_WEATHER_FETCH_TIME = datetime.time(6, 0)
+
+# Prometheus scrapes the worker here. Not published outside the container network.
+METRICS_PORT = 9100
 
 
 def weather_fetch_time() -> datetime.time:
@@ -64,11 +68,30 @@ def build_scheduler() -> BlockingScheduler:
     return scheduler
 
 
+def run_every_job_once() -> None:
+    """Run every job once at startup.
+
+    The staleness metric has no value at all until a job has succeeded, so
+    without this a restart leaves the alert blind until the next scheduled run.
+    Warming the forecast immediately is a free second benefit. A job that fails
+    here is logged and counted like any other failure, and must not stop the
+    process from scheduling the rest.
+    """
+    for name in sorted(jobs.JOBS):
+        try:
+            jobs.run(name)
+        except Exception:
+            log.exception("startup run failed", job=name)
+
+
 def main() -> None:
     configure_logging()
+    start_http_server(METRICS_PORT)
+    log.info("metrics server listening", port=METRICS_PORT)
     scheduler = build_scheduler()
     for job in scheduler.get_jobs():
         log.info("job scheduled", job=job.id, trigger=str(job.trigger))
+    run_every_job_once()
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):

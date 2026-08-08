@@ -13,4 +13,5 @@ COPY app ./app
 COPY worker ./worker
 ENV PATH="/app/.venv/bin:$PATH"
 USER eps
+EXPOSE 9100
 CMD ["python", "-m", "worker.scheduler"]

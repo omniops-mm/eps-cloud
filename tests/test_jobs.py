@@ -9,12 +9,23 @@ import datetime
 
 import pytest
 from flask.testing import FlaskClient
+from prometheus_client import REGISTRY
 from sqlalchemy import select
 
 from app.clock import current_date, utc_now
 from app.db import db_session
 from app.models import EditLog, UserSettings, WeatherCache
 from worker import jobs
+
+
+def sample(metric: str, **labels: str) -> float:
+    """One value from the default registry, or 0 when it has no samples yet.
+
+    The registry lives for the whole test process, so every assertion below
+    compares against a value read moments before rather than an absolute.
+    """
+    value = REGISTRY.get_sample_value(metric, labels)
+    return 0.0 if value is None else value
 
 
 def add_edit(age_days: int) -> None:
@@ -138,3 +149,44 @@ class TestDispatcher:
         with jobs.session_scope() as session:
             # any query at all proves the scope replaced the dead session
             assert session.get(UserSettings, 1) is None
+
+
+class TestJobMetrics:
+    def test_a_successful_run_counts_and_stamps(self, client: FlaskClient) -> None:
+        runs_before = sample("eps_job_runs_total", job="cleanup-audit-log", outcome="ok")
+
+        jobs.run("cleanup-audit-log")
+
+        assert (
+            sample("eps_job_runs_total", job="cleanup-audit-log", outcome="ok") == runs_before + 1
+        )
+        assert sample("eps_job_last_success_timestamp_seconds", job="cleanup-audit-log") > 0
+
+    def test_a_failed_run_counts_as_an_error_and_leaves_the_stamp_alone(
+        self, client: FlaskClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def explode(session: object) -> int:
+            raise RuntimeError("job blew up")
+
+        monkeypatch.setitem(jobs.JOBS, "cleanup-audit-log", explode)
+        errors_before = sample("eps_job_runs_total", job="cleanup-audit-log", outcome="error")
+        stamp_before = sample("eps_job_last_success_timestamp_seconds", job="cleanup-audit-log")
+
+        with pytest.raises(RuntimeError):
+            jobs.run("cleanup-audit-log")
+
+        assert (
+            sample("eps_job_runs_total", job="cleanup-audit-log", outcome="error")
+            == errors_before + 1
+        )
+        assert (
+            sample("eps_job_last_success_timestamp_seconds", job="cleanup-audit-log")
+            == stamp_before
+        )
+
+    def test_duration_is_recorded(self, client: FlaskClient) -> None:
+        before = sample("eps_job_duration_seconds_count", job="cleanup-audit-log")
+
+        jobs.run("cleanup-audit-log")
+
+        assert sample("eps_job_duration_seconds_count", job="cleanup-audit-log") == before + 1

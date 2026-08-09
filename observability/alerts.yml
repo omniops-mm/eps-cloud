@@ -1,0 +1,36 @@
+# Alert rules, evaluated by Prometheus. Three rules by design: each one names
+# a situation that needs a person, everything else belongs on a dashboard.
+
+groups:
+  - name: eps
+    rules:
+      - alert: WebDown
+        # compose restarts a crashed container itself; two minutes of down
+        # means that did not happen
+        expr: up{job="eps-web"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "The web app has been unreachable for 2 minutes."
+
+      - alert: WorkerJobStale
+        # 25h: one daily cycle plus slack. The condition is already a long
+        # measurement, so no "for" is needed on top.
+        expr: time() - eps_job_last_success_timestamp_seconds > 90000
+        labels:
+          severity: warning
+        annotations:
+          summary: "Job {{ $labels.name }} has not succeeded in over 25 hours."
+
+      - alert: High5xxErrorRatio
+        # with no traffic this is 0/0 = NaN, which never fires; silence while
+        # unused is correct for a single-user app
+        expr: >
+          sum(rate(eps_http_requests_total{status=~"5.."}[5m]))
+          / sum(rate(eps_http_requests_total[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "More than 5% of requests are failing."

@@ -1,0 +1,12 @@
+# Alertmanager: receives firing alerts from Prometheus and delivers them.
+# One route, one receiver: everything goes to the log container.
+
+route:
+  receiver: log
+  # alerts arriving within this window are delivered as one grouped payload
+  group_wait: 10s
+
+receivers:
+  - name: log
+    webhook_configs:
+      - url: http://alert-log:9091/

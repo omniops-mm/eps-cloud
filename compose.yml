@@ -97,10 +97,28 @@ services:
       - /var/lib/docker:/var/lib/docker:ro
     # no healthcheck: a dead cadvisor is already visible as up{job="cadvisor"} == 0
 
+  alertmanager:
+    image: prom/alertmanager:v0.33.1
+    volumes:
+      - ./observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      # loopback-only, dev convenience: silences and alert state at :9093
+      - "127.0.0.1:9093:9093"
+
+  alert-log:
+    image: python:3.12-slim
+    # nothing here needs root or a writable filesystem
+    user: "65534:65534"
+    read_only: true
+    volumes:
+      - ./observability/alert-log.py:/alert-log.py:ro
+    command: ["python", "/alert-log.py"]
+
   prometheus:
     image: prom/prometheus:v3.13.2
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
       # scraped history survives restarts; it cannot be rebuilt after the fact
       - prometheus-data:/prometheus
     ports:

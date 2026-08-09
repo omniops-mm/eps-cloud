@@ -1,0 +1,19 @@
+# Prometheus configuration. Mounted read-only by the prometheus service.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # prometheus scrapes itself, so its own resource use is visible
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: eps-web
+    static_configs:
+      - targets: ["web:8000"]
+
+  - job_name: eps-worker
+    static_configs:
+      - targets: ["worker:9100"]

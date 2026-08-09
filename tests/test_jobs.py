@@ -172,14 +172,14 @@ class TestDispatcher:
 
 class TestJobMetrics:
     def test_a_successful_run_counts_and_stamps(self, client: FlaskClient) -> None:
-        runs_before = sample("eps_job_runs_total", job="cleanup-audit-log", outcome="ok")
+        runs_before = sample("eps_job_runs_total", name="cleanup-audit-log", outcome="ok")
 
         jobs.run("cleanup-audit-log")
 
         assert (
-            sample("eps_job_runs_total", job="cleanup-audit-log", outcome="ok") == runs_before + 1
+            sample("eps_job_runs_total", name="cleanup-audit-log", outcome="ok") == runs_before + 1
         )
-        assert sample("eps_job_last_success_timestamp_seconds", job="cleanup-audit-log") > 0
+        assert sample("eps_job_last_success_timestamp_seconds", name="cleanup-audit-log") > 0
 
     def test_a_failed_run_counts_as_an_error_and_leaves_the_stamp_alone(
         self, client: FlaskClient, monkeypatch: pytest.MonkeyPatch
@@ -188,24 +188,24 @@ class TestJobMetrics:
             raise RuntimeError("job blew up")
 
         monkeypatch.setitem(jobs.JOBS, "cleanup-audit-log", explode)
-        errors_before = sample("eps_job_runs_total", job="cleanup-audit-log", outcome="error")
-        stamp_before = sample("eps_job_last_success_timestamp_seconds", job="cleanup-audit-log")
+        errors_before = sample("eps_job_runs_total", name="cleanup-audit-log", outcome="error")
+        stamp_before = sample("eps_job_last_success_timestamp_seconds", name="cleanup-audit-log")
 
         with pytest.raises(RuntimeError):
             jobs.run("cleanup-audit-log")
 
         assert (
-            sample("eps_job_runs_total", job="cleanup-audit-log", outcome="error")
+            sample("eps_job_runs_total", name="cleanup-audit-log", outcome="error")
             == errors_before + 1
         )
         assert (
-            sample("eps_job_last_success_timestamp_seconds", job="cleanup-audit-log")
+            sample("eps_job_last_success_timestamp_seconds", name="cleanup-audit-log")
             == stamp_before
         )
 
     def test_duration_is_recorded(self, client: FlaskClient) -> None:
-        before = sample("eps_job_duration_seconds_count", job="cleanup-audit-log")
+        before = sample("eps_job_duration_seconds_count", name="cleanup-audit-log")
 
         jobs.run("cleanup-audit-log")
 
-        assert sample("eps_job_duration_seconds_count", job="cleanup-audit-log") == before + 1
+        assert sample("eps_job_duration_seconds_count", name="cleanup-audit-log") == before + 1

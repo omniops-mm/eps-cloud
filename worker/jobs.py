@@ -42,19 +42,19 @@ WEATHER_LOOKAHEAD_DAYS = 7
 JOB_RUNS = Counter(
     "eps_job_runs_total",
     "Job runs, by job and how they ended.",
-    ["job", "outcome"],
+    ["name", "outcome"],
 )
 
 JOB_DURATION = Histogram(
     "eps_job_duration_seconds",
     "How long a job took to run.",
-    ["job"],
+    ["name"],
 )
 
 JOB_LAST_SUCCESS = Gauge(
     "eps_job_last_success_timestamp_seconds",
     "When each job last finished without error, in unix seconds.",
-    ["job"],
+    ["name"],
 )
 
 

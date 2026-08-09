@@ -76,5 +76,22 @@ services:
     depends_on:
       - web
 
+  prometheus:
+    image: prom/prometheus:v3.13.2
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # scraped history survives restarts; it cannot be rebuilt after the fact
+      - prometheus-data:/prometheus
+    ports:
+      # loopback-only, dev convenience: the query UI at http://localhost:9090
+      - "127.0.0.1:9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9090/-/healthy"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
 volumes:
   pgdata:
+  prometheus-data:

@@ -2,7 +2,7 @@
 
 from flask import Flask
 
-from app import db, metrics
+from app import db, metrics, request_log
 from app.config import get_settings
 from app.logging import configure_logging
 from app.routes import calendar, dashboard, health, journal, settings
@@ -14,6 +14,7 @@ def create_app() -> Flask:
     app.config["SECRET_KEY"] = get_settings().secret_key
     db.init_app(app)
     metrics.init_app(app)
+    request_log.init_app(app)
     app.register_blueprint(health.bp)
     app.register_blueprint(journal.bp)
     app.register_blueprint(dashboard.bp)

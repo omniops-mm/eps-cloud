@@ -87,6 +87,16 @@ services:
         condition: service_healthy
     # no healthcheck: a dead exporter is already visible as up{job="postgres"} == 0
 
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.55.1
+    volumes:
+      # read-only views of the container runtime's accounting, nothing writable
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    # no healthcheck: a dead cadvisor is already visible as up{job="cadvisor"} == 0
+
   prometheus:
     image: prom/prometheus:v3.13.2
     volumes:

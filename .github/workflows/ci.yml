@@ -79,6 +79,23 @@ jobs:
           uv run alembic upgrade head
           uv run python seed.py
 
+  monitoring-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: promtool validates the prometheus config and alert rules
+        # mounted at /etc/prometheus so the rule_files path inside the config
+        # resolves exactly as it does in the running container
+        run: >
+          docker run --rm -v $PWD/observability:/etc/prometheus:ro
+          --entrypoint promtool prom/prometheus:v3.13.2
+          check config /etc/prometheus/prometheus.yml
+      - name: amtool validates the alertmanager config
+        run: >
+          docker run --rm -v $PWD/observability:/etc/alertmanager:ro
+          --entrypoint amtool prom/alertmanager:v0.33.1
+          check-config /etc/alertmanager/alertmanager.yml
+
   images:
     needs: [lint, types, tests, migrations]
     runs-on: ubuntu-latest

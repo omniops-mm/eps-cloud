@@ -395,61 +395,15 @@ def streak_rebuild() -> str:
 
 # ---------- 4. the version roadmap ----------
 
+# One short title per stop; the roadmap table under the diagram carries the detail.
 STOPS = [
-    (
-        "v0.1",
-        [
-            "The four containers run under",
-            "Compose, and every push is",
-            "built, tested and scanned.",
-        ],
-        "Done",
-        OK,
-    ),
-    (
-        "v0.2",
-        ["Prometheus and Grafana turn", "the telemetry into dashboards", "and alerts."],
-        "Done",
-        OK,
-    ),
-    (
-        "v0.3",
-        [
-            "The stack becomes Helm charts",
-            "on a local cluster, load-tested",
-            "until it autoscales.",
-        ],
-        "Next",
-        ACCENT,
-    ),
-    (
-        "v0.4",
-        ["A private machine becomes", "production, and ArgoCD deploys", "it straight from git."],
-        "Planned",
-        None,
-    ),
-    (
-        "v0.5",
-        [
-            "Terraform creates that machine",
-            "and Ansible configures it,",
-            "rebuildable from nothing.",
-        ],
-        "Planned",
-        None,
-    ),
-    (
-        "v1.0",
-        ["The same design on AWS: a", "hand-built VPC, RDS and IAM,", "used and then destroyed."],
-        "Planned",
-        None,
-    ),
-    (
-        "v1.x",
-        ["The cluster swapped for EKS,", "with keyless AWS access and", "managed secrets."],
-        "Planned",
-        None,
-    ),
+    ("v0.1", "Compose", "Done", OK),
+    ("v0.2", "Observability", "Done", OK),
+    ("v0.3", "Kubernetes", "Next", ACCENT),
+    ("v0.4", "CD and production", "Planned", None),
+    ("v0.5", "Terraform and Ansible", "Planned", None),
+    ("v1.0", "AWS", "Planned", None),
+    ("v1.x", "EKS", "Planned", None),
 ]
 
 
@@ -487,7 +441,7 @@ def roadmap() -> str:
 
     rows = [(row1, bar1, 160, STOPS[:4]), (row2, bar2, 460, STOPS[4:])]
     for centres, bar_y, card_y, stops in rows:
-        for cx, (name, lines, status, tone) in zip(centres, stops):
+        for cx, (name, title, status, tone) in zip(centres, stops):
             # the stop itself
             fill, edge = (tone, tone) if tone else (RAISED, BORDER_STRONG)
             b.append(
@@ -500,26 +454,25 @@ def roadmap() -> str:
                 f'<line x1="{cx}" y1="{bar_y + 15}" x2="{cx}" y2="{card_y}" stroke="{BORDER}" stroke-width="2"/>'
             )
 
-            b.append(card(cx - 84, card_y, 168, 162))
+            b.append(card(cx - 84, card_y, 168, 112))
             b.append(
-                f'<text class="d" x="{cx}" y="{card_y + 28}" text-anchor="middle" font-size="21" '
+                f'<text class="d" x="{cx}" y="{card_y + 30}" text-anchor="middle" font-size="21" '
                 f'font-weight="600" fill="{tone or TEXT}">{name}</text>'
             )
-            for i, line in enumerate(lines):
-                b.append(
-                    f'<text x="{cx}" y="{card_y + 58 + i * 19}" text-anchor="middle" font-size="12.5" fill="{MUTED}">{line}</text>'
-                )
+            b.append(
+                f'<text x="{cx}" y="{card_y + 58}" text-anchor="middle" font-size="13" fill="{MUTED}">{title}</text>'
+            )
 
             if tone:
                 b.append(
-                    chip(cx, card_y + 136, status, fg=tone, bg=f"{tone}1f", edge="none", size=12.5)
+                    chip(cx, card_y + 86, status, fg=tone, bg=f"{tone}1f", edge="none", size=12.5)
                 )
             else:
-                b.append(chip(cx, card_y + 136, status, size=12.5))
+                b.append(chip(cx, card_y + 86, status, size=12.5))
 
     return svg(
         1000,
-        660,
+        610,
         "The version roadmap, a track over two rows",
         "Seven versions on a track that snakes over two rows. v0.1, the four containers under "
         "Compose with CI, and v0.2, Prometheus and Grafana over the running stack, are done. "

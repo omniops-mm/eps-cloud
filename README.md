@@ -101,7 +101,7 @@ The weather shown on the dashboard is retrieved from [BrightSky](https://brights
 
 ## Architecture
 
-The EPS runs as four containers, each responsible for a single concern.
+The application runs as four containers, each responsible for a single concern. Version 0.2 added the monitoring services alongside them, which are described under [Observability](#observability); this section covers the application itself.
 
 <p align="center">
   <img src="docs/img/topology.svg" alt="A browser reaches nginx on port 80. nginx is the only container published outside the private network and proxies to the web container on port 8000. A separate worker container takes no inbound traffic. Both web and worker talk to Postgres, which keeps its files on a named volume.">
@@ -112,7 +112,7 @@ The EPS runs as four containers, each responsible for a single concern.
 - **worker** executes the scheduled jobs in a process of its own rather than inside a web request. It retrieves the weather each morning and trims the audit log each night. Each job can also be invoked individually by name from the command line, which is what an external scheduler would call. No traffic is directed to the worker.
 - **Postgres** stores the data and is accessed through SQLAlchemy, with every schema change applied as a versioned Alembic migration. Its files are held on a named volume so that the data outlives the container.
 
-All four containers share a private network, and nginx exposes the only published port.
+Every container shares one private network, and nginx is the only service reachable from other machines. The database and the monitoring interfaces bind to the local machine only, for use during development.
 
 A fifth service, `migrate`, applies the migrations and then exits. It reuses the web image rather than requiring another one to be built, and neither web nor worker is permitted to start until it has exited successfully. Schema changes are given a dedicated short-lived process because exactly one process should apply them regardless of how many web replicas are running, and because a migration that fails should leave a stack that refuses to start rather than one that starts and then serves errors against an incomplete schema.
 
@@ -142,7 +142,7 @@ The application is single-user throughout. Multi-user support is not a concern f
 
 ## Observability
 
-Version 0.2 adds monitoring to the stack. Prometheus scrapes the web application, the worker, the database and the containers every fifteen seconds and stores the history. Grafana presents it, and Alertmanager delivers the alerts. All of it runs on the same private network as the application, and none of it is reachable from outside.
+Version 0.2 adds monitoring to the stack. Each service publishes its current numbers, request counts, durations, job timestamps, at an HTTP endpoint, and Prometheus reads every endpoint on a fifteen-second interval and stores the history. That collection step is called scraping, and it means the services never send anything anywhere; they only answer when asked. Grafana presents the stored history, Alertmanager delivers the alerts, and all of it runs on the same private network as the application, unreachable from outside.
 
 Every dashboard, alert rule and datasource is a file in this repository and is provisioned automatically when the stack starts. A fresh clone comes up with three dashboards and three alert rules in place without any manual configuration. Grafana treats provisioned dashboards as read-only, so a change to a dashboard is a change to a file in the repository rather than something clicked together and lost. The same files are validated in CI on every push.
 
@@ -156,7 +156,7 @@ The application serves a single user, so the traffic in the graphs below is prod
   <img src="docs/img/grafana-red.png" alt="The RED dashboard: request rate by route, requests by status code, the 5xx error ratio, and p95/p99 latency. During the deliberate outage the error ratio jumps from zero to near 100% and crosses the red threshold line, and latency rises to the five-second timeout ceiling.">
 </p>
 
-The first dashboard answers three questions about the web application: how much traffic arrives, how much of it fails, and how long requests take. Rate, errors and duration are the standard trio for any service that answers requests, and one screen holding all three is what makes an incident readable at a glance. The outage is visible in all four panels at once: requests keep arriving, the failure share jumps to nearly all of them and crosses the red line the alert fires on, and latency climbs to the database connection timeout, since every failing request spends the full timeout finding out the database is gone.
+The first dashboard answers three questions about the web application: how much traffic arrives, how much of it fails, and how long requests take. Rate, errors and duration are the standard trio for any service that answers requests, and one screen holding all three is what makes an incident readable at a glance. Duration is read at the 95th and 99th percentile rather than as an average, meaning the time that the slowest five percent and one percent of requests exceed. An average hides exactly the slow requests a user would complain about, which is why it does not appear. The outage is visible in all four panels at once: requests keep arriving, the failure share jumps to nearly all of them and crosses the red line the alert fires on, and latency climbs to the database connection timeout, since every failing request spends the full timeout finding out the database is gone.
 
 <p align="center">
   <img src="docs/img/grafana-resources.png" alt="The resources dashboard: CPU and memory per container, and three Postgres panels showing connections, commits and rollbacks, and the cache hit ratio. The database panels go dark during the outage because the exporter had nothing to report.">

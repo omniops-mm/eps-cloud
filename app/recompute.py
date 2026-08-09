@@ -15,6 +15,7 @@ knows which timezone applies and passes the date it means.
 
 import datetime
 
+from prometheus_client import Histogram
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -26,7 +27,16 @@ GRACE_MIN_STREAK = 7
 # Once a miss has been forgiven, this many days must pass before another one is.
 GRACE_COOLDOWN_DAYS = 7
 
+# This runs inside the request that triggered it and replays every logged day,
+# so the cost grows as the history grows.
+RECOMPUTE_DURATION = Histogram(
+    "eps_recompute_duration_seconds",
+    "Time spent rebuilding one derived state row.",
+    ["kind"],
+)
 
+
+@RECOMPUTE_DURATION.labels("streak").time()
 def recompute_streak_state(
     session: Session,
     streak_id: int,
@@ -87,6 +97,7 @@ def recompute_streak_state(
     return state
 
 
+@RECOMPUTE_DURATION.labels("tracker").time()
 def recompute_tracker_state(
     session: Session, tracker_id: int, today: datetime.date
 ) -> TrackerState:

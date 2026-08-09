@@ -9,7 +9,6 @@ import datetime
 
 import pytest
 from flask.testing import FlaskClient
-from prometheus_client import REGISTRY
 from sqlalchemy import select
 
 from app.clock import current_date, utc_now
@@ -17,15 +16,7 @@ from app.db import db_session
 from app.models import EditLog, UserSettings, WeatherCache
 from worker import jobs
 
-
-def sample(metric: str, **labels: str) -> float:
-    """One value from the default registry, or 0 when it has no samples yet.
-
-    The registry lives for the whole test process, so every assertion below
-    compares against a value read moments before rather than an absolute.
-    """
-    value = REGISTRY.get_sample_value(metric, labels)
-    return 0.0 if value is None else value
+from .conftest import sample
 
 
 def add_edit(age_days: int) -> None:
@@ -105,6 +96,34 @@ class TestWeatherRefresh:
     def test_no_saved_location_means_no_weather(self, client: FlaskClient) -> None:
         """Without a location there is nothing to ask for, and that is not a crash."""
         assert jobs.refresh_weather(db_session()) == 0
+
+    def test_each_fetch_is_counted(self, client: FlaskClient, stub_forecast: None) -> None:
+        db_session.add(UserSettings(id=1))
+        db_session.flush()
+        expected = jobs.WEATHER_LOOKAHEAD_DAYS + 1
+        before = sample("eps_weather_fetch_total", outcome="ok")
+
+        jobs.refresh_weather(db_session())
+
+        assert sample("eps_weather_fetch_total", outcome="ok") == before + expected
+
+    def test_a_failing_fetch_is_counted_as_an_error(
+        self, client: FlaskClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The fetch swallows failures, so the counter is the only sign of them."""
+
+        def explode(lat: object, lon: object, day: object) -> dict:
+            raise RuntimeError("network down")
+
+        monkeypatch.setattr("app.integrations.brightsky.fetch_forecast", explode)
+        db_session.add(UserSettings(id=1))
+        db_session.flush()
+        expected = jobs.WEATHER_LOOKAHEAD_DAYS + 1
+        before = sample("eps_weather_fetch_total", outcome="error")
+
+        assert jobs.refresh_weather(db_session()) == 0
+
+        assert sample("eps_weather_fetch_total", outcome="error") == before + expected
 
 
 class TestDispatcher:

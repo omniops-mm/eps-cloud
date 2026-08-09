@@ -18,7 +18,7 @@ from app.preferences import grace_enabled, read
 from app.routes.dashboard import build_agenda
 from app.routes.journal import day_items
 
-from .conftest import Builder
+from .conftest import Builder, sample
 
 
 def add_task(**kwargs: object) -> Task:
@@ -298,3 +298,61 @@ class TestTrackerCorrection:
     def test_unknown_tracker_is_not_found(self, client: FlaskClient) -> None:
         day = current_date().isoformat()
         assert client.post(f"/journal/{day}/tracker/999").status_code == 404
+
+
+class TestDomainMetrics:
+    def test_a_pass_is_counted(self, client: FlaskClient, web: Builder) -> None:
+        streak_id = web.streak()
+        day = current_date().isoformat()
+        before = sample("eps_habit_ticks_total", mark="pass")
+
+        client.post(f"/journal/{day}/habit/{streak_id}/pass")
+
+        assert sample("eps_habit_ticks_total", mark="pass") == before + 1
+
+    def test_pressing_the_active_mark_counts_as_cleared(
+        self, client: FlaskClient, web: Builder
+    ) -> None:
+        streak_id = web.streak()
+        day = current_date().isoformat()
+        path = f"/journal/{day}/habit/{streak_id}/pass"
+        client.post(path)
+        before = sample("eps_habit_ticks_total", mark="cleared")
+
+        client.post(path)
+
+        assert sample("eps_habit_ticks_total", mark="cleared") == before + 1
+
+    def test_recompute_is_timed_for_both_kinds(self, client: FlaskClient, web: Builder) -> None:
+        day = current_date().isoformat()
+        streaks_before = sample("eps_recompute_duration_seconds_count", kind="streak")
+        trackers_before = sample("eps_recompute_duration_seconds_count", kind="tracker")
+
+        client.post(f"/journal/{day}/habit/{web.streak()}/pass")
+        client.post(f"/journal/{day}/tracker/{web.tracker()}")
+
+        assert sample("eps_recompute_duration_seconds_count", kind="streak") == streaks_before + 1
+        assert sample("eps_recompute_duration_seconds_count", kind="tracker") == trackers_before + 1
+
+
+class TestUncountedRoutes:
+    """Probe and scrape paths are deliberately left out of the request counter."""
+
+    def test_a_probe_does_not_move_the_counter(self, client: FlaskClient) -> None:
+        before = sample("eps_http_requests_total", method="GET", route="/healthz", status="200")
+
+        assert client.get("/healthz").status_code == 200
+
+        assert (
+            sample("eps_http_requests_total", method="GET", route="/healthz", status="200")
+            == before
+        )
+
+    def test_a_real_request_does_move_the_counter(self, client: FlaskClient) -> None:
+        before = sample("eps_http_requests_total", method="GET", route="/", status="200")
+
+        assert client.get("/").status_code == 200
+
+        assert (
+            sample("eps_http_requests_total", method="GET", route="/", status="200") == before + 1
+        )

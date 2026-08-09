@@ -18,6 +18,7 @@ import datetime
 import decimal
 
 from flask import Blueprint, abort, redirect, render_template, request, url_for
+from prometheus_client import Counter
 from sqlalchemy import select
 from werkzeug.wrappers import Response
 
@@ -43,6 +44,13 @@ from app.recompute import recompute_streak_state, recompute_tracker_state
 from app.routes.dashboard import effective_key, task_ctx
 
 bp = Blueprint("journal", __name__, url_prefix="/journal")
+
+# Requests being served does not prove an entry was written. This counts writes.
+HABIT_TICKS = Counter(
+    "eps_habit_ticks_total",
+    "Habit entries recorded, by what the tick did.",
+    ["mark"],
+)
 
 
 def parse_date(value: str) -> datetime.date:
@@ -176,14 +184,17 @@ def mark_habit(date: str, streak_id: int, mark: str) -> str:
         db_session.add(entry)
         old: bool | None = None
         new: bool | None = passed
+        HABIT_TICKS.labels(mark).inc()
     elif entry.passed == passed:
         db_session.delete(entry)
         old, new = entry.passed, None
         entry = None
+        HABIT_TICKS.labels("cleared").inc()
     else:
         old, new = entry.passed, passed
         entry.passed = passed
         entry.edited_at = utc_now()
+        HABIT_TICKS.labels(mark).inc()
 
     session = db_session()
     maybe_audit(

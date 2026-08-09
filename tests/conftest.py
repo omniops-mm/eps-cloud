@@ -10,6 +10,7 @@ from collections.abc import Iterator
 
 import pytest
 from flask.testing import FlaskClient
+from prometheus_client import REGISTRY
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -27,6 +28,16 @@ START = datetime.date(2026, 1, 5)
 def days(offset: int) -> datetime.date:
     """A date offset in days from the fixed start of the test timeline."""
     return START + datetime.timedelta(days=offset)
+
+
+def sample(metric: str, **labels: str) -> float:
+    """One value from the metrics registry, or 0 when it has no samples yet.
+
+    The registry lasts for the whole test process, so callers compare against a
+    value read moments earlier rather than an absolute.
+    """
+    value = REGISTRY.get_sample_value(metric, labels)
+    return 0.0 if value is None else value
 
 
 class Builder:

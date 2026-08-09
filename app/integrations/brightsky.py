@@ -12,12 +12,20 @@ import json
 import urllib.parse
 import urllib.request
 
+from prometheus_client import Counter
 from sqlalchemy.orm import Session
 
 from app.models import UserSettings, WeatherCache
 
 API_URL = "https://api.brightsky.dev/weather"
 FETCH_TIMEOUT_SECONDS = 3
+
+# The fetch returns None on any failure, so failures are otherwise invisible.
+WEATHER_FETCHES = Counter(
+    "eps_weather_fetch_total",
+    "Forecast fetches attempted, by result.",
+    ["outcome"],
+)
 
 
 def fetch_forecast(lat: decimal.Decimal, lon: decimal.Decimal, day: datetime.date) -> dict:
@@ -49,7 +57,9 @@ def weather_summary(session: Session, day: datetime.date) -> dict | None:
         try:
             raw = fetch_forecast(settings.weather_location_lat, settings.weather_location_lon, day)
         except Exception:  # noqa: BLE001  # any network failure means "no widget"
+            WEATHER_FETCHES.labels("error").inc()
             return None
+        WEATHER_FETCHES.labels("ok").inc()
         cached = WeatherCache(
             date=day,
             raw_payload=raw,

@@ -21,6 +21,10 @@ LATENCY = Histogram(
     ["route"],
 )
 
+# Prometheus and the container healthcheck request these on a timer. Counting
+# them would dominate the request rate of a single-user application.
+UNCOUNTED_ROUTES = frozenset({"/metrics", "/healthz", "/readyz"})
+
 
 def init_app(app: Flask) -> None:
     @app.before_request
@@ -32,6 +36,8 @@ def init_app(app: Flask) -> None:
         # url_rule is the pattern ("/journal/<date>"), not the concrete URL,
         # so metrics do not explode into one series per date
         route = request.url_rule.rule if request.url_rule else "unmatched"
+        if route in UNCOUNTED_ROUTES:
+            return response
         REQUESTS.labels(request.method, route, response.status_code).inc()
         started = getattr(request, "start_time", None)
         if started is not None:

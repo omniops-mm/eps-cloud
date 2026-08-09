@@ -9,11 +9,11 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 
-**Version [v0.1.0](https://github.com/omniops-mm/eps-cloud/releases/tag/v0.1.0) has been released.** Cloning the repository, copying the environment file and running `docker compose up` is enough to build the images and serve the application. Version 0.2 adds the observability layer: Prometheus and Grafana watching the running stack.
+**Version [v0.2.0](https://github.com/omniops-mm/eps-cloud/releases/tag/v0.2.0) has been released.** Cloning the repository, copying the environment file and running `docker compose up` is enough to build the images, serve the application and bring up the monitoring stack with its dashboards and alerts. Version 0.3 moves the stack onto Kubernetes.
 
 ### Quick links
 
-[Why this exists](#why-this-exists) · [How it works](#how-it-works) · [What the EPS tracks](#what-the-eps-tracks) · [Architecture](#architecture) · [The data model](#the-data-model) · [Roadmap](#roadmap) · [Running the application](#running-the-application)
+[Why this exists](#why-this-exists) · [How it works](#how-it-works) · [What the EPS tracks](#what-the-eps-tracks) · [Architecture](#architecture) · [The data model](#the-data-model) · [Observability](#observability) · [Roadmap](#roadmap) · [Running the application](#running-the-application)
 
 ---
 
@@ -140,12 +140,46 @@ The application is single-user throughout. Multi-user support is not a concern f
 
 ---
 
+## Observability
+
+Version 0.2 adds monitoring to the stack. Prometheus scrapes the web application, the worker, the database and the containers every fifteen seconds and stores the history. Grafana presents it, and Alertmanager delivers the alerts. All of it runs on the same private network as the application, and none of it is reachable from outside.
+
+Every dashboard, alert rule and datasource is a file in this repository and is provisioned automatically when the stack starts. A fresh clone comes up with three dashboards and three alert rules in place without any manual configuration. Grafana treats provisioned dashboards as read-only, so a change to a dashboard is a change to a file in the repository rather than something clicked together and lost. The same files are validated in CI on every push.
+
+The application reports more than request counts and latencies. The worker publishes when each scheduled job last succeeded, how often each one runs and how long each takes. The application also measures the time taken to rebuild derived state, how often habits are marked, and whether the weather service responds. These exist because a service can answer every request correctly while its background work has silently stopped.
+
+Three rules alert on situations that require a person: the web application has been unreachable for two minutes, a scheduled job has gone a full day without succeeding, and a sustained share of requests is failing. Notifications are delivered to a webhook receiver that writes every alert to its log, which is how the pipeline is verified without any external service.
+
+The application serves a single user, so the traffic in the graphs below is produced by [a script in this repository](scripts/traffic.py). It sends a weighted mix of page views, habit ticks and the occasional wrong URL through the same nginx entrypoint a browser uses, with randomised gaps between requests. Once the stack had run under that traffic, each alert rule was made to fire once against the running system: the web container was stopped until the unreachable-application rule fired, and the database was stopped under continuing traffic until the error-ratio rule fired. The graphs below cover the second of those tests.
+
+<p align="center">
+  <img src="docs/img/grafana-red.png" alt="The RED dashboard: request rate by route, requests by status code, the 5xx error ratio, and p95/p99 latency. During the deliberate outage the error ratio jumps from zero to near 100% and crosses the red threshold line, and latency rises to the five-second timeout ceiling.">
+</p>
+
+The first dashboard answers three questions about the web application: how much traffic arrives, how much of it fails, and how long requests take. Rate, errors and duration are the standard trio for any service that answers requests, and one screen holding all three is what makes an incident readable at a glance. The outage is visible in all four panels at once: requests keep arriving, the failure share jumps to nearly all of them and crosses the red line the alert fires on, and latency climbs to the database connection timeout, since every failing request spends the full timeout finding out the database is gone.
+
+<p align="center">
+  <img src="docs/img/grafana-resources.png" alt="The resources dashboard: CPU and memory per container, and three Postgres panels showing connections, commits and rollbacks, and the cache hit ratio. The database panels go dark during the outage because the exporter had nothing to report.">
+</p>
+
+The second dashboard covers what the machines underneath are doing: processor time and memory for every container, and the health of the database, its open connections, its commit and rollback rates, and how often reads are served from memory rather than disk. The request dashboard shows symptoms and this one shows causes, which is why they are separate pages. The same outage appears here as an absence: the database panels simply stop, because the exporter had nothing left to ask.
+
+<p align="center">
+  <img src="docs/img/grafana-worker.png" alt="The worker dashboard: time since each scheduled job last succeeded, the share of requests answered under 500 milliseconds across seven days, job runs and durations, and the application's own measurements of habit ticks, recompute time and weather fetches.">
+</p>
+
+The third dashboard watches the work that happens outside any request. The first panel is the one that matters most: how long ago each scheduled job last succeeded. The line climbs steadily and falls back to zero each time a job completes, and a line that only climbs is a job that has silently stopped, which is exactly what the staleness alert watches for. Beside it, a single figure states the share of requests answered within half a second over the past seven days. The remaining panels count job runs and durations, and the application's own activity: habits marked, recompute time, and weather fetches.
+
+<div align="right"><a href="#top">back to top</a></div>
+
+---
+
 ## Roadmap
 
 Each version adds one substantial piece of infrastructure. The application itself changes very little between them, which is deliberate. The objective is a small application deployed thoroughly rather than a large one deployed poorly.
 
 <p align="center">
-  <img src="docs/img/roadmap.svg" alt="Seven versions on a track. v0.1, the four containers under Compose with CI, is done. v0.2 adds Prometheus and Grafana over the running stack. v0.3 moves the stack onto Kubernetes. v0.4 adds pull-based deployment with ArgoCD and a private production machine. v0.5 builds that machine from code with Terraform and Ansible. v1.0 lifts the design onto AWS, and v1.x swaps the cluster for EKS.">
+  <img src="docs/img/roadmap.svg" alt="Seven versions on a track. v0.1, the four containers under Compose with CI, and v0.2, Prometheus and Grafana over the running stack, are done. v0.3 moves the stack onto Kubernetes and is next. v0.4 adds pull-based deployment with ArgoCD and a private production machine. v0.5 builds that machine from code with Terraform and Ansible. v1.0 lifts the design onto AWS, and v1.x swaps the cluster for EKS.">
 </p>
 
 <!-- Written as HTML rather than a pipe table so the cells can carry valign="middle".
@@ -163,15 +197,15 @@ Each version adds one substantial piece of infrastructure. The application itsel
 </tr>
 <tr>
 <td valign="middle"><b>v0.2</b></td>
-<td valign="middle"><ul><li>Prometheus scraping the application, the worker, the database and the containers.</li><li>Grafana dashboards and alert rules stored in the repository, so a fresh <code>compose up</code> rebuilds them.</li><li>Alert rules covering an unreachable application and scheduled jobs that stop running.</li></ul></td>
+<td valign="middle"><ul><li>Prometheus scraping the application, the worker, the database and the containers.</li><li>Grafana dashboards and alert rules stored in the repository, so a fresh <code>compose up</code> rebuilds them.</li><li>Alert rules covering an unreachable application, failing requests, and scheduled jobs that stop running.</li></ul></td>
 <td valign="middle">Prometheus, Grafana, Alertmanager, postgres_exporter, cAdvisor</td>
-<td valign="middle"><b>Next</b></td>
+<td valign="middle"><b>Done</b></td>
 </tr>
 <tr>
 <td valign="middle"><b>v0.3</b></td>
 <td valign="middle"><ul><li>The same stack expressed as Kubernetes workloads on a local cluster.</li><li>The worker's jobs turned into CronJobs, network policy between the tiers, and TLS at the ingress.</li><li>A load test used to drive the autoscaler.</li></ul></td>
 <td valign="middle">k3d, Helm, NetworkPolicies, probes, HPA, ingress-nginx, cert-manager, k6</td>
-<td valign="middle">Planned</td>
+<td valign="middle"><b>Next</b></td>
 </tr>
 <tr>
 <td valign="middle"><b>v0.4</b></td>
@@ -207,7 +241,7 @@ Security, observability and the setting up of CI/CD pipelines are all things tha
 | Version | CI/CD | Security | Observability |
 | --- | --- | --- | --- |
 | **v0.1** | lint, type check, test, build, scan, publish by commit SHA | gitleaks, non-root images, pinned bases, Trivy, secrets kept out of git | JSON logs, `/metrics`, `/healthz`, `/readyz` |
-| **v0.2** | dashboards and alert rules provisioned from the repository | metrics endpoint hidden at the proxy | Prometheus, Grafana, Alertmanager |
+| **v0.2** | dashboards and alert rules provisioned from the repository, monitoring configs validated in CI | metrics endpoint hidden at the proxy, read-only monitoring role for the database | Prometheus, Grafana, Alertmanager |
 | **v0.3** | charts linted and templated in CI | NetworkPolicies, TLS at the ingress | k6 load test driving the autoscaler |
 | **v0.4** | pull-based CD: the cluster syncs itself from git | image signing, SBOM, Pod Security Admission | kube-prometheus-stack, Loki, synthetic probes |
 | **v0.5** | the playbook proven idempotent, ansible-lint in CI | host hardening: ssh lockdown, firewall, unattended upgrades, Vault | database backups on a timer, with the restore rehearsed |

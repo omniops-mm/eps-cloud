@@ -409,8 +409,8 @@ STOPS = [
     (
         "v0.2",
         ["Prometheus and Grafana turn", "the telemetry into dashboards", "and alerts."],
-        "Next",
-        ACCENT,
+        "Done",
+        OK,
     ),
     (
         "v0.3",
@@ -419,8 +419,8 @@ STOPS = [
             "on a local cluster, load-tested",
             "until it autoscales.",
         ],
-        "Planned",
-        None,
+        "Next",
+        ACCENT,
     ),
     (
         "v0.4",
@@ -460,13 +460,13 @@ def roadmap() -> str:
     row1 = [130, 370, 610, 850]
     row2 = [790, 500, 210]
     bar1, bar2 = 120, 420
-    here = 250  # between the finished rung and the one being built
+    here = 490  # between the finished rung and the one being built
 
     # the track reads as a status bar: green up to the rung that is finished, brand
     # colour for the one being built, plain border for everything still ahead
-    b.append(f'<rect x="36" y="{bar1 - 5}" width="{row1[0] - 36}" height="10" rx="5" fill="{OK}"/>')
+    b.append(f'<rect x="36" y="{bar1 - 5}" width="{row1[1] - 36}" height="10" rx="5" fill="{OK}"/>')
     b.append(
-        f'<rect x="{row1[0]}" y="{bar1 - 5}" width="{here - row1[0]}" height="10" fill="{ACCENT}"/>'
+        f'<rect x="{row1[1]}" y="{bar1 - 5}" width="{here - row1[1]}" height="10" fill="{ACCENT}"/>'
     )
     b.append(f'<rect x="{here}" y="{bar1 - 5}" width="{920 - here}" height="10" fill="{BORDER}"/>')
     # the turn: out to the right edge, down, and back in to the second row
@@ -477,7 +477,7 @@ def roadmap() -> str:
     b.append(f'<rect x="90" y="{bar2 - 5}" width="{920 - 90}" height="10" fill="{BORDER}"/>')
     b.append(f'<path d="M90,{bar2 - 13} L58,{bar2} L90,{bar2 + 13} Z" fill="{BORDER}"/>')
 
-    # "we are here", pinned to the track just past v0.1
+    # "we are here", pinned to the track just past v0.2
     b.append(
         f'<rect x="{here - 62}" y="56" width="124" height="30" rx="15" fill="{ACCENT}"/>'
         f'<path d="M{here - 7},86 L{here},96 L{here + 7},86 Z" fill="{ACCENT}"/>'
@@ -522,11 +522,11 @@ def roadmap() -> str:
         660,
         "The version roadmap, a track over two rows",
         "Seven versions on a track that snakes over two rows. v0.1, the four containers under "
-        "Compose with CI, is done. v0.2, Prometheus and Grafana over the running stack, is next "
-        "and is where the project stands. v0.3 moves the stack onto Kubernetes, v0.4 adds "
-        "pull-based deployment with ArgoCD and a private production machine, v0.5 builds that "
-        "machine from code with Terraform and Ansible, v1.0 lifts the design onto AWS, and "
-        "v1.x swaps the cluster for EKS.",
+        "Compose with CI, and v0.2, Prometheus and Grafana over the running stack, are done. "
+        "v0.3, which moves the stack onto Kubernetes, is next and is where the project stands. "
+        "v0.4 adds pull-based deployment with ArgoCD and a private production machine, v0.5 "
+        "builds that machine from code with Terraform and Ansible, v1.0 lifts the design onto "
+        "AWS, and v1.x swaps the cluster for EKS.",
         "".join(b),
     )
 

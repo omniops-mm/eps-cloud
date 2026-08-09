@@ -3,6 +3,9 @@
 
 route:
   receiver: log
+  # each alert gets its own group: without this every alert shares one group,
+  # and a new alert can wait out group_interval behind an unrelated older one
+  group_by: ["alertname"]
   # alerts arriving within this window are delivered as one grouped payload
   group_wait: 10s
 

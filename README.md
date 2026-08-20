@@ -209,8 +209,8 @@ Each version adds one substantial piece of infrastructure. The application itsel
 </tr>
 <tr>
 <td valign="middle"><b>v0.4</b></td>
-<td valign="middle"><ul><li>A private virtual machine as the production environment, with the local cluster kept for development.</li><li>Pull-based deployment: the cluster pulls its state from git, and CI holds no credentials for it.</li><li>Monitoring and log aggregation moved onto the cluster. Images signed and shipped with a software bill of materials.</li></ul></td>
-<td valign="middle">k3s, ArgoCD, kube-prometheus-stack, Loki, cosign, Pod Security Admission</td>
+<td valign="middle"><ul><li>A private virtual machine as the production environment, with the local cluster kept for development.</li><li>Pull-based deployment: the cluster pulls its state from git, and CI holds no credentials for it.</li><li>Monitoring and log aggregation moved onto the cluster, joined by request tracing. Images signed and shipped with a software bill of materials.</li></ul></td>
+<td valign="middle">k3s, ArgoCD, kube-prometheus-stack, Loki, Tempo, OpenTelemetry, cosign, Pod Security Admission</td>
 <td valign="middle">Planned</td>
 </tr>
 <tr>
@@ -243,7 +243,7 @@ Security, observability and the setting up of CI/CD pipelines are all things tha
 | **v0.1** | lint, type check, test, build, scan, publish by commit SHA | gitleaks, non-root images, pinned bases, Trivy, secrets kept out of git | JSON logs, `/metrics`, `/healthz`, `/readyz` |
 | **v0.2** | dashboards and alert rules provisioned from the repository, monitoring configs validated in CI | metrics endpoint hidden at the proxy, read-only monitoring role for the database | Prometheus, Grafana, Alertmanager |
 | **v0.3** | charts linted and templated in CI | NetworkPolicies, TLS at the ingress | k6 load test driving the autoscaler |
-| **v0.4** | pull-based CD: the cluster syncs itself from git | image signing, SBOM, Pod Security Admission | kube-prometheus-stack, Loki, synthetic probes |
+| **v0.4** | pull-based CD: the cluster syncs itself from git | image signing, SBOM, Pod Security Admission | kube-prometheus-stack, Loki, Tempo tracing, synthetic probes |
 | **v0.5** | the playbook proven idempotent, ansible-lint in CI | host hardening: ssh lockdown, firewall, unattended upgrades, Vault | database backups on a timer, with the restore rehearsed |
 | **v1.0** | deploys authenticate through OIDC, no long-lived keys | tfsec, least-privilege IAM | CloudWatch for the AWS pieces |
 | **v1.x** | GitOps against EKS | IRSA, External Secrets | the same stack carried onto EKS |

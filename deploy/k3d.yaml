@@ -1,0 +1,29 @@
+# Local development cluster. Create it with:
+#   k3d cluster create --config deploy/k3d.yaml
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: eps
+
+# Pinned to match the kubectl minor; the k3d default image runs several minors behind.
+image: rancher/k3s:v1.36.3-k3s1
+
+servers: 1
+agents: 0
+
+ports:
+  # Host 80 and 443 map to the cluster load balancer, which fronts the ingress controller.
+  - port: 80:80
+    nodeFilters:
+      - loadbalancer
+  - port: 443:443
+    nodeFilters:
+      - loadbalancer
+
+options:
+  k3s:
+    extraArgs:
+      # k3s ships Traefik by default; this stack uses ingress-nginx.
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:*

@@ -1,5 +1,5 @@
-# Network topology as policy: the proxy is the only way in, the db talks only
-# to the app, job pods talk to nobody who calls first.
+# Inbound rules for the namespace: the ingress controller is the only way in,
+# the db accepts connections from the app pods only, job pods accept none.
 #
 # NetworkPolicies are allowlists. Once any policy selects a pod for a
 # direction, everything not explicitly allowed in that direction is denied.

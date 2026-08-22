@@ -1,0 +1,9 @@
+# Self-signed issuer. Nothing here is internet-facing, so an ACME issuer has
+# no way to validate a domain; the browser warning on eps.localtest.me is
+# expected.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned
+spec:
+  selfSigned: {}

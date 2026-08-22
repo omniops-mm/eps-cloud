@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector:
+    app: web
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  {{- if not .Values.hpa.enabled }}
+  # Omitted when the HPA is on; the autoscaler owns the count then.
+  replicas: {{ .Values.web.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      securityContext:
+        # uid 1000 is the eps user from Dockerfile.web. runAsNonRoot makes the
+        # kubelet refuse the pod if the image ever regresses to root.
+        runAsNonRoot: true
+        runAsUser: 1000
+      initContainers:
+        # ponytail: migrations run here, so with 2 replicas both new pods run
+        # them on rollout. Postgres DDL is transactional and the second run
+        # no-ops. Upgrade path is a dedicated migration Job; revisit at v0.4.
+        - name: migrate
+          image: {{ .Values.image.registry }}/web:{{ .Values.image.tag }}
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+      containers:
+        - name: web
+          image: {{ .Values.image.registry }}/web:{{ .Values.image.tag }}
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+          env:
+            - name: TZ
+              value: {{ .Values.timezone }}
+          # Liveness only checks that the process answers; restarting web
+          # because the database blipped would make the blip worse.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          # Readiness checks the database. A not-ready pod stops receiving
+          # traffic but is not restarted, and rejoins when the db returns.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 2
+          resources: {{- .Values.web.resources | toYaml | nindent 12 }}

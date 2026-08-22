@@ -1,0 +1,30 @@
+# Routing rule for the cluster's ingress controller. This replaces the compose
+# nginx tier; the controller is the reverse proxy, installed once per cluster.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  {{- if .Values.ingress.tls }}
+  annotations:
+    # cert-manager watches for this and keeps a certificate in the tls secret.
+    cert-manager.io/cluster-issuer: selfsigned
+  {{- end }}
+spec:
+  ingressClassName: nginx
+  {{- if .Values.ingress.tls }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: eps-tls
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  name: http

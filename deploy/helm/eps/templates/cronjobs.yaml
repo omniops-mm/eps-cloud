@@ -1,0 +1,46 @@
+# One CronJob per entry in .Values.jobs.
+{{- range .Values.jobs }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .name }}
+spec:
+  schedule: {{ .schedule | quote }}
+  timeZone: {{ $.Values.timezone }}
+  # Never run two of the same job at once.
+  concurrencyPolicy: Forbid
+  # A sleeping laptop cluster misses schedules. On wake, start a missed run
+  # if it is less than an hour late, otherwise skip it.
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      # Two retries, each in a fresh pod with its own log.
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: jobs
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          containers:
+            - name: {{ .name }}
+              image: {{ $.Values.image.registry }}/worker:{{ $.Values.image.tag }}
+              command: ["python", "-m", "worker.jobs", {{ .name | quote }}]
+              envFrom:
+                - secretRef:
+                    name: {{ $.Values.existingSecret }}
+              env:
+                - name: TZ
+                  value: {{ $.Values.timezone }}
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 250m
+                  memory: 128Mi
+{{- end }}

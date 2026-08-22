@@ -1,0 +1,49 @@
+# Only what genuinely varies between installs. Everything else is fixed in the
+# templates, same as the raw manifests.
+
+image:
+  registry: ghcr.io/omniops-mm/eps-cloud
+  # Full commit sha, the tag CI publishes. Never latest.
+  tag: 9230464b35605b1c1e695787d7a671493522372b
+
+# The Secret is created imperatively before install; the chart references it
+# and never creates it. See raw-manifests/10-secret.yaml.example.
+existingSecret: eps
+
+timezone: Europe/Berlin
+
+web:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+db:
+  storage: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+jobs:
+  - name: refresh-weather
+    schedule: "0 6 * * *"
+  - name: cleanup-audit-log
+    schedule: "0 3 * * *"
+
+ingress:
+  host: eps.localtest.me
+  tls: true
+
+hpa:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUPercent: 70

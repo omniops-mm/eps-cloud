@@ -399,8 +399,8 @@ def streak_rebuild() -> str:
 STOPS = [
     ("v0.1", "Compose", "Done", OK),
     ("v0.2", "Observability", "Done", OK),
-    ("v0.3", "Kubernetes", "Next", ACCENT),
-    ("v0.4", "CD and production", "Planned", None),
+    ("v0.3", "Kubernetes", "Done", OK),
+    ("v0.4", "CD and production", "Next", ACCENT),
     ("v0.5", "Terraform and Ansible", "Planned", None),
     ("v1.0", "AWS", "Planned", None),
     ("v1.x", "EKS", "Planned", None),
@@ -475,9 +475,10 @@ def roadmap() -> str:
         610,
         "The version roadmap, a track over two rows",
         "Seven versions on a track that snakes over two rows. v0.1, the four containers under "
-        "Compose with CI, and v0.2, Prometheus and Grafana over the running stack, are done. "
-        "v0.3, which moves the stack onto Kubernetes, is next and is where the project stands. "
-        "v0.4 adds pull-based deployment with ArgoCD and a private production machine, v0.5 "
+        "Compose with CI, v0.2, Prometheus and Grafana over the running stack, and v0.3, the "
+        "stack on Kubernetes, are done. "
+        "v0.4 adds pull-based deployment with ArgoCD and a private production machine and is "
+        "next. v0.5 "
         "builds that machine from code with Terraform and Ansible, v1.0 lifts the design onto "
         "AWS, and v1.x swaps the cluster for EKS.",
         "".join(b),

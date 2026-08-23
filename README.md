@@ -9,11 +9,11 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 
-**Version [v0.2.0](https://github.com/omniops-mm/eps-cloud/releases/tag/v0.2.0) has been released.** Cloning the repository, copying the environment file and running `docker compose up` is enough to build the images, serve the application and bring up the monitoring stack with its dashboards and alerts. Version 0.3 moves the stack onto Kubernetes.
+**Version [v0.3.0](https://github.com/omniops-mm/eps-cloud/releases/tag/v0.3.0) has been released.** The application runs on a local Kubernetes cluster, created from a committed configuration and installed as a Helm chart, with TLS at the ingress, network policy between the tiers and autoscaling on the web tier. The Compose stack from the earlier versions is unchanged. Version 0.4 adds a production machine and pull-based deployment.
 
 ### Quick links
 
-[Why this exists](#why-this-exists) · [How it works](#how-it-works) · [What the EPS tracks](#what-the-eps-tracks) · [Architecture](#architecture) · [The data model](#the-data-model) · [Observability](#observability) · [Roadmap](#roadmap) · [Running the application](#running-the-application)
+[Why this exists](#why-this-exists) · [How it works](#how-it-works) · [What the EPS tracks](#what-the-eps-tracks) · [Architecture](#architecture) · [The data model](#the-data-model) · [Observability](#observability) · [Kubernetes](#kubernetes) · [Roadmap](#roadmap) · [Running the application](#running-the-application)
 
 ---
 
@@ -107,7 +107,7 @@ The application runs as four containers, each responsible for a single concern. 
   <img src="docs/img/topology.svg" alt="A browser reaches nginx on port 80. nginx is the only container published outside the private network and proxies to the web container on port 8000. A separate worker container takes no inbound traffic. Both web and worker talk to Postgres, which keeps its files on a named volume.">
 </p>
 
-- **nginx** is the only container reachable from outside the private network. It serves the static files and passes every other request inward. TLS is introduced in version 0.3, where this container's role passes to the Kubernetes ingress controller.
+- **nginx** is the only container reachable from outside the private network. It serves the static files and passes every other request inward. When the application runs on Kubernetes, this container's role passes to the ingress controller, which also terminates TLS.
 - **web** is the application itself. It runs Flask under gunicorn and renders every page on the server through Jinja2 templates. HTMX provides the interactive behaviour, which removes the need for a separate frontend application.
 - **worker** executes the scheduled jobs in a process of its own rather than inside a web request. It retrieves the weather each morning and trims the audit log each night. Each job can also be invoked individually by name from the command line, which is what an external scheduler would call. No traffic is directed to the worker.
 - **Postgres** stores the data and is accessed through SQLAlchemy, with every schema change applied as a versioned Alembic migration. Its files are held on a named volume so that the data outlives the container.
@@ -174,6 +174,57 @@ The third dashboard watches the work that happens outside any request. The first
 
 ---
 
+## Kubernetes
+
+Version 0.3 runs the application on a local Kubernetes cluster. The images, the schema and the pages are unchanged from the Compose stack. k3d creates the cluster from `deploy/k3d.yaml`: one node running k3s v1.36 inside a Docker container, host ports 80 and 443 mapped to the cluster's load balancer, and the bundled Traefik disabled because ingress-nginx is installed instead. k3s is the distribution planned for the production machine at version 0.5.
+
+On the cluster the application consists of the following objects:
+
+- Postgres runs as a StatefulSet with one replica. Its volume is provisioned by local-path and is re-attached to the replacement pod when the pod is deleted.
+- The web application runs as a Deployment behind a ClusterIP Service. An init container runs `alembic upgrade head` before the application container starts. The liveness probe calls `/healthz` and the readiness probe calls `/readyz`; a pod that fails readiness is removed from the Service endpoints and is not restarted.
+- The jobs `refresh-weather` and `cleanup-audit-log` run as CronJobs at 06:00 and 03:00 Europe/Berlin, each running `python -m worker.jobs <name>` in the worker image. The scheduler process from the Compose stack is not deployed. The fetch times on the settings page apply to the Compose deployment only.
+- ingress-nginx routes the host eps.localtest.me to the web Service. eps.localtest.me is a public DNS name that resolves to 127.0.0.1.
+- cert-manager issues the certificate for that host from a self-signed ClusterIssuer and renews it. Browsers warn on self-signed certificates. Nothing in this project is exposed to the internet, so no public authority can validate the name.
+- NetworkPolicies deny all inbound traffic in the namespace by default. Three rules open the paths in use: the database accepts port 5432 from the web and job pods, the web pods accept port 8000 from the ingress-nginx namespace, and the job pods accept nothing.
+- A HorizontalPodAutoscaler scales the web Deployment between two and six replicas, targeting 70 percent of the pod's CPU request.
+
+<p align="center">
+  <img src="docs/img/k8s-https.png" alt="The dashboard served at https://eps.localtest.me, with the browser's certificate warning acknowledged and the padlock struck through, because the certificate is self-signed.">
+</p>
+
+The dashboard above is served through the ingress at https://eps.localtest.me. The marker on the address bar is the browser's response to the self-signed certificate; the connection itself is encrypted with the certificate cert-manager issued.
+
+`deploy/raw-manifests/` holds these objects as plain files, one kind per file. `deploy/helm/eps` templates the same objects; the image tag, the secret name, the job list, the resources, the ingress host and the autoscaler bounds are values. The chart does not create the Secret. It is created once with kubectl, and the exact command is in the header of `10-secret.yaml.example`.
+
+k6 sends traffic through the ingress to the dashboard route. At 200 concurrent users the 95th-percentile latency is 28 milliseconds with no failed requests, and the autoscaler runs the Deployment at six replicas. At 600 users the six replicas reach their CPU limits, the 95th percentile rises to 3.3 seconds and 2.7 percent of requests fail. The sustained ceiling on this machine is roughly 155 requests per second.
+
+<p align="center">
+  <img src="docs/img/k8s-cluster.png" alt="Terminal output: kubectl get pods showing the database, two web replicas and the completed job pods, and the k6 summary with the passed thresholds of the 200-user run.">
+</p>
+
+The terminal output above shows the namespace after the load test: the database pod, the web replicas, the completed job pods, and the k6 summary of the 200-user run with both thresholds passed.
+
+Bringing the cluster up from a fresh clone:
+
+```bash
+k3d cluster create --config deploy/k3d.yaml
+
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo add jetstack https://charts.jetstack.io
+helm install ingress-nginx ingress-nginx/ingress-nginx --version 4.15.1 --namespace ingress-nginx --create-namespace
+helm install cert-manager jetstack/cert-manager --version v1.21.1 --namespace cert-manager --create-namespace --set crds.enabled=true
+
+kubectl apply -f deploy/raw-manifests/00-namespace.yaml -f deploy/cluster-issuer.yaml
+# create the secret next; the exact command is in deploy/raw-manifests/10-secret.yaml.example
+helm install eps deploy/helm/eps -n eps
+```
+
+The dashboard is then served at https://eps.localtest.me. The Compose stack and the cluster both claim port 80, so one of them runs at a time. Removing everything is `k3d cluster delete eps`, which also deletes the cluster's data.
+
+<div align="right"><a href="#top">back to top</a></div>
+
+---
+
 ## Roadmap
 
 Each version adds one substantial piece of infrastructure. The application itself changes very little between them, which is deliberate. The objective is a small application deployed thoroughly rather than a large one deployed poorly.
@@ -203,15 +254,15 @@ Each version adds one substantial piece of infrastructure. The application itsel
 </tr>
 <tr>
 <td valign="middle"><b>v0.3</b></td>
-<td valign="middle"><ul><li>The same stack expressed as Kubernetes workloads on a local cluster.</li><li>The worker's jobs turned into CronJobs, network policy between the tiers, and TLS at the ingress.</li><li>A load test used to drive the autoscaler.</li></ul></td>
-<td valign="middle">k3d, Helm, NetworkPolicies, probes, HPA, ingress-nginx, cert-manager, k6</td>
-<td valign="middle"><b>Next</b></td>
+<td valign="middle"><ul><li>The application expressed as Kubernetes workloads, first as plain manifests and then as a Helm chart.</li><li>The worker's jobs turned into CronJobs, network policy between the tiers, and TLS at the ingress.</li><li>A load test that drives the autoscaler to its ceiling.</li></ul></td>
+<td valign="middle">k3d, Helm, NetworkPolicies, probes, HPA, ingress-nginx, cert-manager, kubeconform, k6</td>
+<td valign="middle"><b>Done</b></td>
 </tr>
 <tr>
 <td valign="middle"><b>v0.4</b></td>
 <td valign="middle"><ul><li>A private virtual machine as the production environment, with the local cluster kept for development.</li><li>Pull-based deployment: the cluster pulls its state from git, and CI holds no credentials for it.</li><li>Monitoring and log aggregation moved onto the cluster, joined by request tracing. Images signed and shipped with a software bill of materials.</li></ul></td>
 <td valign="middle">k3s, ArgoCD, kube-prometheus-stack, Loki, Tempo, OpenTelemetry, cosign, Pod Security Admission</td>
-<td valign="middle">Planned</td>
+<td valign="middle"><b>Next</b></td>
 </tr>
 <tr>
 <td valign="middle"><b>v0.5</b></td>
@@ -242,7 +293,7 @@ Security, observability and the setting up of CI/CD pipelines are all things tha
 | --- | --- | --- | --- |
 | **v0.1** | lint, type check, test, build, scan, publish by commit SHA | gitleaks, non-root images, pinned bases, Trivy, secrets kept out of git | JSON logs, `/metrics`, `/healthz`, `/readyz` |
 | **v0.2** | dashboards and alert rules provisioned from the repository, monitoring configs validated in CI | metrics endpoint hidden at the proxy, read-only monitoring role for the database | Prometheus, Grafana, Alertmanager |
-| **v0.3** | charts linted and templated in CI | NetworkPolicies, TLS at the ingress | k6 load test driving the autoscaler |
+| **v0.3** | the chart linted and every manifest schema-validated in CI | NetworkPolicies, TLS at the ingress, plain Secrets named as the weak link | k6 load test driving the autoscaler |
 | **v0.4** | pull-based CD: the cluster syncs itself from git | image signing, SBOM, Pod Security Admission | kube-prometheus-stack, Loki, Tempo tracing, synthetic probes |
 | **v0.5** | the playbook proven idempotent, ansible-lint in CI | host hardening: ssh lockdown, firewall, unattended upgrades, Vault | database backups on a timer, with the restore rehearsed |
 | **v1.0** | deploys authenticate through OIDC, no long-lived keys | tfsec, least-privilege IAM | CloudWatch for the AWS pieces |
@@ -263,7 +314,7 @@ cp .env.example .env      # then fill in the values it asks for
 docker compose up
 ```
 
-The first run builds the images, applies the migrations and serves the dashboard on port 80. The system starts empty.
+The first run builds the images, applies the migrations and serves the dashboard on port 80. The system starts empty. Running the application on a local Kubernetes cluster instead is described under [Kubernetes](#kubernetes).
 
 An example database can be loaded instead, for anyone who would rather see the application with data already in it:
 

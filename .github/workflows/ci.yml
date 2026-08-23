@@ -96,6 +96,25 @@ jobs:
           --entrypoint amtool prom/alertmanager:v0.33.1
           check-config /etc/alertmanager/alertmanager.yml
 
+  deploy-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: helm lint
+        run: >
+          docker run --rm -v $PWD/deploy/helm:/charts:ro
+          alpine/helm:4.2.3 lint /charts/eps
+      - name: kubeconform validates the raw manifests
+        # the secret example is skipped by its extension; cluster-issuer.yaml
+        # is a cert-manager CRD instance with no schema in the default registry
+        run: >
+          docker run --rm -v $PWD/deploy/raw-manifests:/manifests:ro
+          ghcr.io/yannh/kubeconform:v0.8.0 -strict -summary /manifests
+      - name: kubeconform validates the rendered chart
+        run: |
+          docker run --rm -v $PWD/deploy/helm:/charts:ro alpine/helm:4.2.3 template eps /charts/eps > rendered.yaml
+          docker run --rm -v $PWD:/work:ro ghcr.io/yannh/kubeconform:v0.8.0 -strict -summary /work/rendered.yaml
+
   images:
     needs: [lint, types, tests, migrations]
     runs-on: ubuntu-latest

@@ -5,7 +5,7 @@ kind: Simple
 metadata:
   name: eps
 
-# Pinned to match the kubectl minor; the k3d default image runs several minors behind.
+# Pinned; the image k3d uses by default trails current Kubernetes by several minor versions.
 image: rancher/k3s:v1.36.3-k3s1
 
 servers: 1

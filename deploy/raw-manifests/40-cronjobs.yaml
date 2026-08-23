@@ -10,8 +10,8 @@ spec:
   timeZone: Europe/Berlin
   # Never run two of the same job at once.
   concurrencyPolicy: Forbid
-  # A sleeping laptop cluster misses schedules. On wake, start a missed run
-  # if it is less than an hour late, otherwise skip it.
+  # A stopped cluster misses schedules. A missed firing starts if it is less
+  # than an hour late, otherwise it is skipped.
   startingDeadlineSeconds: 3600
   jobTemplate:
     spec:

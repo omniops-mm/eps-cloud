@@ -176,7 +176,7 @@ The third dashboard watches the work that happens outside any request. The first
 
 ## Kubernetes
 
-Version 0.3 runs the application on a local Kubernetes cluster. The images, the schema and the pages are unchanged from the Compose stack. k3d creates the cluster from `deploy/k3d.yaml`: one node running k3s v1.36 inside a Docker container, host ports 80 and 443 mapped to the cluster's load balancer, and the bundled Traefik disabled because ingress-nginx is installed instead. k3s is the distribution planned for the production machine at version 0.5.
+Version 0.3 runs the application on a local Kubernetes cluster. The images, the schema and the pages are unchanged from the Compose stack. k3d creates the cluster from `deploy/k3d.yaml`: one node running k3s v1.36 inside a Docker container, host ports 80 and 443 mapped to the cluster's load balancer, and the bundled Traefik disabled because ingress-nginx is installed instead. k3s is the distribution planned for the production machine at version 0.4.
 
 On the cluster the application consists of the following objects:
 
@@ -186,7 +186,7 @@ On the cluster the application consists of the following objects:
 - ingress-nginx routes the host eps.localtest.me to the web Service. eps.localtest.me is a public DNS name that resolves to 127.0.0.1.
 - cert-manager issues the certificate for that host from a self-signed ClusterIssuer and renews it. Browsers warn on self-signed certificates. Nothing in this project is exposed to the internet, so no public authority can validate the name.
 - NetworkPolicies deny all inbound traffic in the namespace by default. Three rules open the paths in use: the database accepts port 5432 from the web and job pods, the web pods accept port 8000 from the ingress-nginx namespace, and the job pods accept nothing.
-- A HorizontalPodAutoscaler scales the web Deployment between two and six replicas, targeting 70 percent of the pod's CPU request.
+- A HorizontalPodAutoscaler adds and removes web replicas with CPU load. Its bounds and target are values in the chart.
 
 <p align="center">
   <img src="docs/img/k8s-https.png" alt="The dashboard served at https://eps.localtest.me, with the browser's certificate warning acknowledged and the padlock struck through, because the certificate is self-signed.">
@@ -196,7 +196,7 @@ The dashboard above is served through the ingress at https://eps.localtest.me. T
 
 `deploy/raw-manifests/` holds these objects as plain files, one kind per file. `deploy/helm/eps` templates the same objects; the image tag, the secret name, the job list, the resources, the ingress host and the autoscaler bounds are values. The chart does not create the Secret. It is created once with kubectl, and the exact command is in the header of `10-secret.yaml.example`.
 
-k6 sends traffic through the ingress to the dashboard route. At 200 concurrent users the 95th-percentile latency is 28 milliseconds with no failed requests, and the autoscaler runs the Deployment at six replicas. At 600 users the six replicas reach their CPU limits, the 95th percentile rises to 3.3 seconds and 2.7 percent of requests fail. The sustained ceiling on this machine is roughly 155 requests per second.
+`deploy/k6/load.js` sends ramped traffic through the ingress to the dashboard route, and fails the run if the error rate or the 95th-percentile latency crosses its thresholds. The autoscaler adds web replicas under the ramp and removes them after it.
 
 <p align="center">
   <img src="docs/img/k8s-cluster.png" alt="Terminal output of kubectl get all across all namespaces: the database and web pods in the eps namespace, the cert-manager and ingress-nginx components, the ingress controller's LoadBalancer service, the autoscaler holding two replicas, and the two CronJobs with their Berlin schedules.">
@@ -254,7 +254,7 @@ Each version adds one substantial piece of infrastructure. The application itsel
 </tr>
 <tr>
 <td valign="middle"><b>v0.3</b></td>
-<td valign="middle"><ul><li>The application expressed as Kubernetes workloads, first as plain manifests and then as a Helm chart.</li><li>The worker's jobs turned into CronJobs, network policy between the tiers, and TLS at the ingress.</li><li>A load test that drives the autoscaler to its ceiling.</li></ul></td>
+<td valign="middle"><ul><li>The application expressed as Kubernetes workloads, as plain manifests and as a Helm chart.</li><li>The worker's jobs turned into CronJobs, network policy between the tiers, and TLS at the ingress.</li><li>A load test that drives the autoscaler.</li></ul></td>
 <td valign="middle">k3d, Helm, NetworkPolicies, probes, HPA, ingress-nginx, cert-manager, kubeconform, k6</td>
 <td valign="middle"><b>Done</b></td>
 </tr>

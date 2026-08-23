@@ -199,10 +199,10 @@ The dashboard above is served through the ingress at https://eps.localtest.me. T
 k6 sends traffic through the ingress to the dashboard route. At 200 concurrent users the 95th-percentile latency is 28 milliseconds with no failed requests, and the autoscaler runs the Deployment at six replicas. At 600 users the six replicas reach their CPU limits, the 95th percentile rises to 3.3 seconds and 2.7 percent of requests fail. The sustained ceiling on this machine is roughly 155 requests per second.
 
 <p align="center">
-  <img src="docs/img/k8s-cluster.png" alt="Terminal output: kubectl get pods showing the database, two web replicas and the completed job pods, and the k6 summary with the passed thresholds of the 200-user run.">
+  <img src="docs/img/k8s-cluster.png" alt="Terminal output of kubectl get all across all namespaces: the database and web pods in the eps namespace, the cert-manager and ingress-nginx components, the ingress controller's LoadBalancer service, the autoscaler holding two replicas, and the two CronJobs with their Berlin schedules.">
 </p>
 
-The terminal output above shows the namespace after the load test: the database pod, the web replicas, the completed job pods, and the k6 summary of the 200-user run with both thresholds passed.
+The output above is `kubectl get all -A` on the running cluster: the application pods in the eps namespace, the cert-manager and ingress-nginx components in their own namespaces, the ingress controller's LoadBalancer service, the autoscaler holding two replicas at idle, and the two CronJobs with their schedules.
 
 Bringing the cluster up from a fresh clone:
 

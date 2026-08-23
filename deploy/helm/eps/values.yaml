@@ -43,7 +43,7 @@ ingress:
   tls: true
 
 hpa:
-  enabled: false
+  enabled: true
   minReplicas: 2
   maxReplicas: 6
   targetCPUPercent: 70

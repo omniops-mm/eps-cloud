@@ -414,13 +414,19 @@ def roadmap() -> str:
     row1 = [130, 370, 610, 850]
     row2 = [790, 500, 210]
     bar1, bar2 = 120, 420
-    here = 490  # between the finished rung and the one being built
 
-    # the track reads as a status bar: green up to the rung that is finished, brand
-    # colour for the one being built, plain border for everything still ahead
-    b.append(f'<rect x="36" y="{bar1 - 5}" width="{row1[1] - 36}" height="10" rx="5" fill="{OK}"/>')
+    # the track reads as a status bar: green up to the last finished rung, brand
+    # colour from there to midway before the rung being built, plain border for
+    # everything still ahead. Derived from STOPS so a status flip moves the bars.
+    # ponytail: assumes the finished rungs all sit in row one; revisit at v0.5.
+    done = sum(1 for _, _, status, _ in STOPS if status == "Done")
+    here = (row1[done - 1] + row1[done]) // 2
+
     b.append(
-        f'<rect x="{row1[1]}" y="{bar1 - 5}" width="{here - row1[1]}" height="10" fill="{ACCENT}"/>'
+        f'<rect x="36" y="{bar1 - 5}" width="{row1[done - 1] - 36}" height="10" rx="5" fill="{OK}"/>'
+    )
+    b.append(
+        f'<rect x="{row1[done - 1]}" y="{bar1 - 5}" width="{here - row1[done - 1]}" height="10" fill="{ACCENT}"/>'
     )
     b.append(f'<rect x="{here}" y="{bar1 - 5}" width="{920 - here}" height="10" fill="{BORDER}"/>')
     # the turn: out to the right edge, down, and back in to the second row
@@ -431,7 +437,7 @@ def roadmap() -> str:
     b.append(f'<rect x="90" y="{bar2 - 5}" width="{920 - 90}" height="10" fill="{BORDER}"/>')
     b.append(f'<path d="M90,{bar2 - 13} L58,{bar2} L90,{bar2 + 13} Z" fill="{BORDER}"/>')
 
-    # "we are here", pinned to the track just past v0.2
+    # "we are here", pinned midway between the finished rung and the next
     b.append(
         f'<rect x="{here - 62}" y="56" width="124" height="30" rx="15" fill="{ACCENT}"/>'
         f'<path d="M{here - 7},86 L{here},96 L{here + 7},86 Z" fill="{ACCENT}"/>'

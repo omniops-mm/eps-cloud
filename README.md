@@ -230,7 +230,7 @@ The dashboard is then served at https://eps.localtest.me. The Compose stack and 
 Each version adds one substantial piece of infrastructure. The application itself changes very little between them, which is deliberate. The objective is a small application deployed thoroughly rather than a large one deployed poorly.
 
 <p align="center">
-  <img src="docs/img/roadmap.svg" alt="Seven versions on a track. v0.1, the four containers under Compose with CI, and v0.2, Prometheus and Grafana over the running stack, are done. v0.3 moves the stack onto Kubernetes and is next. v0.4 adds pull-based deployment with ArgoCD and a private production machine. v0.5 builds that machine from code with Terraform and Ansible. v1.0 lifts the design onto AWS, and v1.x swaps the cluster for EKS.">
+  <img src="docs/img/roadmap.svg" alt="Seven versions on a track that snakes over two rows. v0.1, the four containers under Compose with CI, v0.2, Prometheus and Grafana over the running stack, and v0.3, the stack on Kubernetes, are done. v0.4 adds pull-based deployment with ArgoCD and a private production machine and is next. v0.5 builds a machine from code with Terraform and Ansible, v1.0 lifts the design onto AWS, and v1.x swaps the cluster for EKS.">
 </p>
 
 <!-- Written as HTML rather than a pipe table so the cells can carry valign="middle".
@@ -266,8 +266,8 @@ Each version adds one substantial piece of infrastructure. The application itsel
 </tr>
 <tr>
 <td valign="middle"><b>v0.5</b></td>
-<td valign="middle"><ul><li>The production machine created by Terraform and configured and hardened by Ansible.</li><li>The machine destroyed and rebuilt from the repository, to prove nothing on it was set up by hand.</li></ul></td>
-<td valign="middle">Terraform, Ansible, Ansible Vault</td>
+<td valign="middle"><ul><li>A machine created by Terraform on AWS, configured and hardened by the same Ansible roles that set up the production machine.</li><li>The machine destroyed and rebuilt from the repository, to prove nothing on it was set up by hand.</li></ul></td>
+<td valign="middle">Terraform, AWS EC2, Ansible, Ansible Vault</td>
 <td valign="middle">Planned</td>
 </tr>
 <tr>

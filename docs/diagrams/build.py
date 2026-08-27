@@ -485,7 +485,7 @@ def roadmap() -> str:
         "stack on Kubernetes, are done. "
         "v0.4 adds pull-based deployment with ArgoCD and a private production machine and is "
         "next. v0.5 "
-        "builds that machine from code with Terraform and Ansible, v1.0 lifts the design onto "
+        "builds a machine from code with Terraform and Ansible, v1.0 lifts the design onto "
         "AWS, and v1.x swaps the cluster for EKS.",
         "".join(b),
     )

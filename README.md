@@ -1,7 +1,7 @@
 <a id="top"></a>
 
 <p align="center">
-  <img src="docs/img/banner.svg" alt="EPS. A productivity webapp that assembles your day for you. Built with Python, Flask, HTMX, Postgres, Docker Compose, Ansible, Kubernetes, Terraform and AWS.">
+  <img src="docs/img/banner.svg" alt="EPS. A productivity webapp that assembles your day for you. Built with Python, Flask, HTMX, Postgres, Docker Compose, Ansible, Kubernetes, Terraform and Google Cloud.">
 </p>
 
 <p align="center">
@@ -230,7 +230,7 @@ The dashboard is then served at https://eps.localtest.me. The Compose stack and 
 Each version adds one substantial piece of infrastructure. The application itself changes very little between them, which is deliberate. The objective is a small application deployed thoroughly rather than a large one deployed poorly.
 
 <p align="center">
-  <img src="docs/img/roadmap.svg" alt="Seven versions on a track that snakes over two rows. v0.1, the four containers under Compose with CI, v0.2, Prometheus and Grafana over the running stack, and v0.3, the stack on Kubernetes, are done. v0.4 adds pull-based deployment with ArgoCD and a private production machine and is next. v0.5 builds a machine from code with Terraform and Ansible, v1.0 lifts the design onto AWS, and v1.x swaps the cluster for EKS.">
+  <img src="docs/img/roadmap.svg" alt="Seven versions on a track that snakes over two rows. v0.1, the four containers under Compose with CI, v0.2, Prometheus and Grafana over the running stack, and v0.3, the stack on Kubernetes, are done. v0.4 adds pull-based deployment with ArgoCD and a private production machine and is next. v0.5 builds that machine from code with Terraform and Ansible, v0.6 moves the network and the database onto managed cloud services, and v1.0 swaps the cluster for managed Kubernetes.">
 </p>
 
 <!-- Written as HTML rather than a pipe table so the cells can carry valign="middle".
@@ -260,26 +260,26 @@ Each version adds one substantial piece of infrastructure. The application itsel
 </tr>
 <tr>
 <td valign="middle"><b>v0.4</b></td>
-<td valign="middle"><ul><li>A private virtual machine as the production environment, with the local cluster kept for development.</li><li>Pull-based deployment: the cluster pulls its state from git, and CI holds no credentials for it.</li><li>Monitoring and log aggregation moved onto the cluster, joined by request tracing. Images signed and shipped with a software bill of materials.</li></ul></td>
-<td valign="middle">k3s, ArgoCD, kube-prometheus-stack, Loki, Tempo, OpenTelemetry, cosign, Pod Security Admission</td>
+<td valign="middle"><ul><li>A private virtual machine as the production environment, with the local cluster kept for development.</li><li>Pull-based deployment: the cluster pulls its state from git, and CI holds no credentials for it.</li><li>Monitoring and log aggregation moved onto the cluster, joined by request tracing. Images signed and shipped with a software bill of materials.</li><li>Application secrets pulled from a managed secret store instead of living in the cluster.</li></ul></td>
+<td valign="middle">k3s, ArgoCD, kube-prometheus-stack, Loki, Tempo, OpenTelemetry, External Secrets, Secret Manager, cosign, Pod Security Admission</td>
 <td valign="middle"><b>Next</b></td>
 </tr>
 <tr>
 <td valign="middle"><b>v0.5</b></td>
-<td valign="middle"><ul><li>A machine created by Terraform on AWS, configured and hardened by the same Ansible roles that set up the production machine.</li><li>The machine destroyed and rebuilt from the repository, to prove nothing on it was set up by hand.</li></ul></td>
-<td valign="middle">Terraform, AWS EC2, Ansible, Ansible Vault</td>
+<td valign="middle"><ul><li>The production machine created by Terraform and configured and hardened by Ansible.</li><li>The machine destroyed and rebuilt from the repository, to prove nothing on it was set up by hand.</li></ul></td>
+<td valign="middle">Terraform, Google Compute Engine, Ansible, Ansible Vault</td>
+<td valign="middle">Planned</td>
+</tr>
+<tr>
+<td valign="middle"><b>v0.6</b></td>
+<td valign="middle"><ul><li>A network built by hand rather than taken from the default, with the production machine moved off the public internet.</li><li>The database moved to a managed service, and deploys that authenticate without stored credentials.</li><li>Spending controls that enforce rather than alert, with the managed pieces brought up for each working session and torn down after.</li></ul></td>
+<td valign="middle">Terraform, VPC, Cloud NAT, Cloud SQL, IAM, Workload Identity Federation, GitHub Actions OIDC, tfsec, Budgets, Infracost</td>
 <td valign="middle">Planned</td>
 </tr>
 <tr>
 <td valign="middle"><b>v1.0</b></td>
-<td valign="middle"><ul><li>The same design on AWS: a network built by hand rather than taken from the default, with public and private subnets across two availability zones.</li><li>The database moved to a managed service, and a deployment that authenticates without stored credentials.</li><li>Infrastructure brought up for each working session and destroyed at the end of it, with budget alarms from the start.</li></ul></td>
-<td valign="middle">Terraform, AWS VPC, EC2, RDS, IAM, S3, DynamoDB, GitHub Actions OIDC, tfsec, Budgets, Infracost</td>
-<td valign="middle">Planned</td>
-</tr>
-<tr>
-<td valign="middle"><b>v1.x</b></td>
-<td valign="middle"><ul><li>The cluster swapped for managed Kubernetes behind a load balancer.</li><li>Pods with keyless access to AWS, and secrets pulled from a managed store instead of being held in the cluster.</li></ul></td>
-<td valign="middle">EKS, ALB, IRSA, External Secrets, Secrets Manager</td>
+<td valign="middle"><ul><li>The cluster swapped for managed Kubernetes behind a cloud load balancer.</li><li>Pods with keyless access to cloud services, and secrets pulled from the managed store through workload identity.</li></ul></td>
+<td valign="middle">GKE, Cloud Load Balancing, Workload Identity, External Secrets, Secret Manager</td>
 <td valign="middle">Planned</td>
 </tr>
 </tbody>
@@ -294,10 +294,10 @@ Security, observability and the setting up of CI/CD pipelines are all things tha
 | **v0.1** | lint, type check, test, build, scan, publish by commit SHA | gitleaks, non-root images, pinned bases, Trivy, secrets kept out of git | JSON logs, `/metrics`, `/healthz`, `/readyz` |
 | **v0.2** | dashboards and alert rules provisioned from the repository, monitoring configs validated in CI | metrics endpoint hidden at the proxy, read-only monitoring role for the database | Prometheus, Grafana, Alertmanager |
 | **v0.3** | the chart linted and every manifest schema-validated in CI | NetworkPolicies, TLS at the ingress, plain Secrets named as the weak link | k6 load test driving the autoscaler |
-| **v0.4** | pull-based CD: the cluster syncs itself from git | image signing, SBOM, Pod Security Admission | kube-prometheus-stack, Loki, Tempo tracing, synthetic probes |
+| **v0.4** | pull-based CD: the cluster syncs itself from git | image signing, SBOM, Pod Security Admission, secrets from a managed store | kube-prometheus-stack, Loki, Tempo tracing, synthetic probes |
 | **v0.5** | the playbook proven idempotent, ansible-lint in CI | host hardening: ssh lockdown, firewall, unattended upgrades, Vault | database backups on a timer, with the restore rehearsed |
-| **v1.0** | deploys authenticate through OIDC, no long-lived keys | tfsec, least-privilege IAM | CloudWatch for the AWS pieces |
-| **v1.x** | GitOps against EKS | IRSA, External Secrets | the same stack carried onto EKS |
+| **v0.6** | deploys authenticate through OIDC, no long-lived keys | tfsec, least-privilege IAM | Cloud Monitoring for the managed pieces |
+| **v1.0** | GitOps against GKE | Workload Identity, External Secrets | the same stack carried onto GKE |
 
 One piece of deliberate sequencing is worth naming: the structured logs and the metrics endpoint went into the application at version 0.1, before anything existed to read them. Telemetry only accumulates from the moment it is emitted, so the application was instrumented first and the dashboards come second.
 

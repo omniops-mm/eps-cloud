@@ -401,9 +401,9 @@ STOPS = [
     ("v0.2", "Observability", "Done", OK),
     ("v0.3", "Kubernetes", "Done", OK),
     ("v0.4", "CD and production", "Next", ACCENT),
-    ("v0.5", "Terraform and Ansible", "Planned", None),
-    ("v1.0", "AWS", "Planned", None),
-    ("v1.x", "EKS", "Planned", None),
+    ("v0.5", "Infrastructure as code", "Planned", None),
+    ("v0.6", "Cloud", "Planned", None),
+    ("v1.0", "Managed Kubernetes", "Planned", None),
 ]
 
 
@@ -484,9 +484,9 @@ def roadmap() -> str:
         "Compose with CI, v0.2, Prometheus and Grafana over the running stack, and v0.3, the "
         "stack on Kubernetes, are done. "
         "v0.4 adds pull-based deployment with ArgoCD and a private production machine and is "
-        "next. v0.5 "
-        "builds a machine from code with Terraform and Ansible, v1.0 lifts the design onto "
-        "AWS, and v1.x swaps the cluster for EKS.",
+        "next. v0.5 builds that machine from code with Terraform and Ansible, v0.6 moves "
+        "the network and the database onto managed cloud services, and v1.0 swaps the "
+        "cluster for managed Kubernetes.",
         "".join(b),
     )
 
@@ -502,7 +502,7 @@ STACK = [
     "Ansible",
     "Kubernetes",
     "Terraform",
-    "AWS",
+    "Google Cloud",
 ]
 
 
@@ -562,7 +562,7 @@ def banner() -> str:
         320,
         "EPS",
         "The EPS wordmark over its one-line description, with the stack listed underneath: "
-        "Python, Flask, HTMX, Postgres, Docker Compose, Ansible, Kubernetes, Terraform and AWS.",
+        "Python, Flask, HTMX, Postgres, Docker Compose, Ansible, Kubernetes, Terraform and Google Cloud.",
         "".join(b),
     )
 

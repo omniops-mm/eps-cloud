@@ -199,3 +199,18 @@ jobs:
         run: |
           docker tag "$LOCAL_IMAGE" "$REMOTE_IMAGE"
           docker push "$REMOTE_IMAGE"
+
+      - name: Record published image digest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          REMOTE_IMAGE: ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ github.sha }}
+        run: python3 scripts/record_image_digest.py > image-${{ matrix.image }}.json
+
+      - name: Upload image digest record
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-digest-${{ matrix.image }}
+          path: image-${{ matrix.image }}.json
+          if-no-files-found: error
+          retention-days: 30

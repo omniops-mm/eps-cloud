@@ -10,7 +10,7 @@ metadata:
     cert-manager.io/cluster-issuer: selfsigned
   {{- end }}
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   {{- if .Values.ingress.tls }}
   tls:
     - hosts:

@@ -1,0 +1,5 @@
+# Install as /etc/rancher/k3s/config.yaml before the first server start.
+write-kubeconfig-mode: "0600"
+secrets-encryption: true
+disable:
+  - servicelb

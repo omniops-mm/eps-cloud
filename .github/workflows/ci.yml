@@ -230,3 +230,42 @@ jobs:
           path: image-${{ matrix.image }}.json
           if-no-files-found: error
           retention-days: 30
+
+  sign-images:
+    needs: images
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [web, worker, nginx]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: image-digest-${{ matrix.image }}
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Sign and verify the exact published digest
+        env:
+          IMAGE_NAME: ${{ matrix.image }}
+        # Keyless signing publishes release identity/digest metadata to Sigstore's public log.
+        run: python3 -m scripts.sign_image
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-verification-${{ matrix.image }}
+          path: verified-${{ matrix.image }}.json
+          if-no-files-found: error
+          retention-days: 30

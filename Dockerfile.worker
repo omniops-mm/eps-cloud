@@ -6,7 +6,11 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 
 FROM python:3.12-slim
-RUN useradd --create-home --uid 1000 eps
+# Apply the Perl security update even when the Python base image lags Debian.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade perl-base \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 1000 eps
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY app ./app

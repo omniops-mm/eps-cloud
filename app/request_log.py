@@ -51,7 +51,7 @@ def init_app(app: Flask) -> None:
         log.info(
             "request",
             method=request.method,
-            path=request.path,
+            path=route,
             status=response.status_code,
             duration_ms=duration_ms,
         )

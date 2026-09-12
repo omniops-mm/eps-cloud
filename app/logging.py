@@ -1,13 +1,4 @@
-"""Structured logging: one JSON object per line on stdout.
-
-Containers treat stdout as the log stream, so no files and no rotation here;
-whatever runs the container collects the lines. JSON because log collectors
-parse it without regex guesswork.
-
-Any logged field whose name suggests a credential is replaced with [redacted]
-before the line is written. That makes "accidentally logged the database URL"
-a non-event.
-"""
+"""JSON logs with credential fields removed and exception types retained."""
 
 import logging
 import sys
@@ -20,7 +11,19 @@ SECRET_MARKERS = ("password", "secret", "token", "key", "credential", "database_
 
 
 def redact_secrets(logger: WrappedLogger, method: str, event: EventDict) -> EventDict:
-    """structlog processor: blank out any field that looks like a credential."""
+    """Omit free-text library diagnostics and exception details."""
+    record = event.get("_record")
+    if isinstance(record, logging.LogRecord):
+        # Library messages can embed SQL parameters, URLs or request bodies.
+        event["logger"] = record.name
+        event["event"] = "library_log"
+    exception = event.pop("exc_info", None)
+    if exception is True:
+        exception = sys.exc_info()
+    if isinstance(exception, tuple) and exception[0] is not None:
+        event["error_type"] = exception[0].__name__
+    event.pop("stack_info", None)
+    event.pop("exception", None)
     for field in event:
         name = field.lower()
         if any(marker in name for marker in SECRET_MARKERS):

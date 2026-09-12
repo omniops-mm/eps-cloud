@@ -74,7 +74,7 @@ services:
       context: .
       dockerfile: Dockerfile.nginx
     ports:
-      - "80:80"
+      - "127.0.0.1:80:80"
     depends_on:
       - web
 

@@ -158,6 +158,7 @@ jobs:
       - name: Scan for known vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.74.0
           image-ref: eps-${{ matrix.image }}:${{ github.sha }}
           format: sarif
           output: trivy-${{ matrix.image }}.sarif
@@ -172,12 +173,13 @@ jobs:
           sarif_file: trivy-${{ matrix.image }}.sarif
           category: trivy-${{ matrix.image }}
 
-      - name: Block on critical problems that have a fix
+      - name: Block on high or critical problems that have a fix
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.74.0
           image-ref: eps-${{ matrix.image }}:${{ github.sha }}
           format: table
-          severity: CRITICAL
+          severity: HIGH,CRITICAL
           # an unfixable CVE in a base image should not block unrelated work
           ignore-unfixed: true
           exit-code: "1"
@@ -185,6 +187,7 @@ jobs:
       - name: Create image software inventory (SBOM)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.74.0
           image-ref: eps-${{ matrix.image }}:${{ github.sha }}
           format: cyclonedx
           output: sbom-${{ matrix.image }}.cdx.json

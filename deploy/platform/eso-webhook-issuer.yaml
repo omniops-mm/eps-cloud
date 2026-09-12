@@ -1,0 +1,7 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: eso-webhook
+  namespace: external-secrets
+spec:
+  selfSigned: {}

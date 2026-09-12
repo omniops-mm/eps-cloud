@@ -1,0 +1,72 @@
+# Token creation is limited to one named identity in each target namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eps-secrets
+  namespace: eps
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: eso-federation-token
+  namespace: eps
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - serviceaccounts/token
+  resourceNames:
+  - eps-secrets
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: eso-federation-token
+  namespace: eps
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: eso-federation-token
+subjects:
+- kind: ServiceAccount
+  name: external-secrets-eps
+  namespace: external-secrets
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eps-secrets
+  namespace: monitoring
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: eso-federation-token
+  namespace: monitoring
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - serviceaccounts/token
+  resourceNames:
+  - eps-secrets
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: eso-federation-token
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: eso-federation-token
+subjects:
+- kind: ServiceAccount
+  name: external-secrets-monitoring
+  namespace: external-secrets

@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: eps
+  namespace: argocd
+spec:
+  description: EPS application resources only; platform and secrets are operator-owned.
+  sourceRepos:
+    - https://github.com/omniops-mm/eps-cloud.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: eps
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - {group: "", kind: Service}
+    - {group: "", kind: ConfigMap}
+    - {group: apps, kind: Deployment}
+    - {group: apps, kind: StatefulSet}
+    - {group: batch, kind: Job}
+    - {group: batch, kind: CronJob}
+    - {group: autoscaling, kind: HorizontalPodAutoscaler}
+    - {group: networking.k8s.io, kind: Ingress}
+    - {group: networking.k8s.io, kind: NetworkPolicy}

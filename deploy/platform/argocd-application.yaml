@@ -1,0 +1,33 @@
+# Preparation only: install after image, identity and release snapshot gates pass.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: eps
+  namespace: argocd
+  # No cascading-deletion finalizer: deleting this object must not delete the DB.
+spec:
+  project: eps
+  source:
+    repoURL: https://github.com/omniops-mm/eps-cloud.git
+    targetRevision: production
+    path: chart
+    helm:
+      releaseName: eps
+      valueFiles:
+        - values-production.yaml
+        - values-gitops.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: eps
+  # No automated policy. Initial synchronization is an explicit operator action.
+  syncPolicy:
+    syncOptions:
+      - RespectIgnoreDifferences=true
+      - FailOnSharedResource=true
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: web
+      namespace: eps
+      jsonPointers:
+        - /spec/replicas

@@ -45,6 +45,88 @@ def validate_objects(objects: list[dict]) -> None:
                 raise ValueError(f"Unsafe container settings: {kind}/{name}")
 
 
+def validate_gitops(objects: list[dict]) -> None:
+    """Check the release boundary and migration ordering used by Argo."""
+    platform = ROOT / "deploy/platform"
+    project = yaml.safe_load((platform / "argocd-project.yaml").read_text())["spec"]
+    application = yaml.safe_load((platform / "argocd-application.yaml").read_text())
+    spec = application["spec"]
+    source = spec["source"]
+    repo = "https://github.com/omniops-mm/eps-cloud.git"
+    destination = {"server": "https://kubernetes.default.svc", "namespace": "eps"}
+    allowed = {
+        ("", "Service"),
+        ("", "ConfigMap"),
+        ("apps", "Deployment"),
+        ("apps", "StatefulSet"),
+        ("batch", "Job"),
+        ("batch", "CronJob"),
+        ("autoscaling", "HorizontalPodAutoscaler"),
+        ("networking.k8s.io", "Ingress"),
+        ("networking.k8s.io", "NetworkPolicy"),
+    }
+    if (
+        project["sourceRepos"] != [repo]
+        or project["destinations"] != [destination]
+        or project.get("clusterResourceWhitelist") != []
+        or {(item["group"], item["kind"]) for item in project["namespaceResourceWhitelist"]}
+        != allowed
+        or spec["project"] != "eps"
+        or spec["destination"] != destination
+        or source
+        != {
+            "repoURL": repo,
+            "targetRevision": "production",
+            "path": "chart",
+            "helm": {
+                "releaseName": "eps",
+                "valueFiles": ["values-production.yaml", "values-gitops.yaml"],
+            },
+        }
+        or spec.get("ignoreDifferences")
+        != [
+            {
+                "group": "apps",
+                "kind": "Deployment",
+                "name": "web",
+                "namespace": "eps",
+                "jsonPointers": ["/spec/replicas"],
+            }
+        ]
+        or "automated" in spec["syncPolicy"]
+        or application["metadata"].get("finalizers")
+        or set(spec["syncPolicy"]["syncOptions"])
+        != {
+            "RespectIgnoreDifferences=true",
+            "FailOnSharedResource=true",
+        }
+    ):
+        raise ValueError("Unsafe GitOps source, destination or permissions")
+    for obj in objects:
+        group = obj["apiVersion"].split("/")[0] if "/" in obj["apiVersion"] else ""
+        if (group, obj["kind"]) not in allowed:
+            raise ValueError("Chart resource exceeds the Argo project allowlist")
+        expected = {"StatefulSet": "0", "Job": "1", "Deployment": "2", "CronJob": "2"}.get(
+            obj["kind"]
+        )
+        if (
+            expected
+            and obj["metadata"].get("annotations", {}).get("argocd.argoproj.io/sync-wave")
+            != expected
+        ):
+            raise ValueError("GitOps migration ordering changed")
+        if obj["kind"] == "Deployment" and (
+            "replicas" in obj["spec"] or obj["spec"]["template"]["spec"].get("initContainers")
+        ):
+            raise ValueError("GitOps must use the migration Job and leave replicas to HPA")
+    jobs = [obj for obj in objects if obj["kind"] == "Job"]
+    if (
+        len(jobs) != 1
+        or jobs[0]["metadata"]["annotations"].get("argocd.argoproj.io/hook") != "Sync"
+    ):
+        raise ValueError("GitOps requires one blocking Sync migration hook")
+
+
 def main() -> None:
     chart = str(ROOT / "deploy/helm/eps")
     with tempfile.TemporaryDirectory(prefix="eps-deploy-check-") as temporary:
@@ -54,10 +136,15 @@ def main() -> None:
                 args = ["helm", "template", "eps", chart, "--namespace", "eps"]
                 if production:
                     args += ["-f", str(ROOT / "deploy/helm/eps/values-production.yaml")]
-                args += ["--set", f"migration.mode={mode}"]
+                if production and mode == "job":
+                    args += ["-f", str(ROOT / "deploy/helm/eps/values-gitops.yaml")]
+                else:
+                    args += ["--set", f"migration.mode={mode}"]
                 output = subprocess.check_output(args, text=True)
                 objects = [obj for obj in yaml.safe_load_all(output) if obj]
                 validate_objects(objects)
+                if production and mode == "job":
+                    validate_gitops(objects)
                 web = next(o for o in objects if o["kind"] == "Deployment")
                 inits = web["spec"]["template"]["spec"].get("initContainers", [])
                 jobs = [o for o in objects if o["kind"] == "Job"]

@@ -1,0 +1,4 @@
+# Apply after values-production.yaml only when Argo manages the release.
+argocd: true
+migration:
+  mode: job

@@ -34,3 +34,15 @@ Anyone authorized to create pods using a federated ServiceAccount can act as tha
 The old `eso-metadata.yaml` exception has been removed. Keep `metadata-policy.yaml`; if migrating an existing installation, explicitly remove the old policy after switching authentication. No running installation is migrated by editing these files.
 
 References: [ESO Google provider](https://external-secrets.io/main/provider/google-secrets-manager/), [Google federation for private Kubernetes](https://docs.cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes).
+
+## GitOps preparation
+
+`argocd-project.yaml` permits only this repository, the `eps` namespace and the application chart's resource kinds. It does not permit Secrets, secret providers, RBAC or cluster resources. This is an Argo policy boundary, not a replacement for restricting the controller's Kubernetes permissions. Operators who can change these policies or create workloads remain trusted.
+
+`argocd-application.yaml` watches the planned `production` branch's `chart/` directory. It deliberately has no automatic synchronization or cascading-deletion finalizer. No branch or release promotion is created by these files. Do not install it until a reviewed Argo image, restricted controller installation, private access, repository authentication and verified digest-based snapshot are ready. The Argo chart/install values will be pinned with that reviewed image.
+
+The GitOps-only values layer reuses the existing migration Job: database wave 0, migration wave 1, web and scheduled jobs wave 2. Use a full application sync; selective resource synchronization skips hooks. A failed migration prevents the later wave from being applied, but existing pods and scheduled jobs may continue running. Migrations must remain compatible with the running version; this is not a maintenance-mode mechanism. HPA retains replica ownership. Production Helm installs outside Argo keep their existing init migration behavior.
+
+Before enabling automation, prove failed-migration blocking, retained database storage, replica ownership and rollback in the isolated rehearsal. Rolling back application code does not undo database migrations.
+
+References: [Argo projects](https://argo-cd.readthedocs.io/en/stable/user-guide/projects/), [sync waves](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-waves/), [sync options](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/).

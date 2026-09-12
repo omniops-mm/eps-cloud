@@ -1,6 +1,9 @@
 # Supply web and worker digests from a successful trusted CI run.
 secureCookies: true
 db:
+  image: dhi.io/postgres:16.15-alpine3.24@sha256:873f9a267256074af3f047f10d9f0015f73aa959194bcea45075eb98afe9b9cb
+  imagePullSecrets:
+    - name: dhi-pull
   bootstrapRoles: true
   storage: 8Gi
 web:

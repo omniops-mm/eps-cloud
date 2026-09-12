@@ -145,6 +145,24 @@ def main() -> None:
                 validate_objects(objects)
                 if production and mode == "job":
                     validate_gitops(objects)
+                if production:
+                    database = next(o for o in objects if o["kind"] == "StatefulSet")
+                    pod = database["spec"]["template"]["spec"]
+                    runtime = pod["containers"][0]
+                    bootstrap = pod.get("initContainers", [])
+                    if (
+                        not runtime["image"].startswith("dhi.io/postgres:")
+                        or "@sha256:" not in runtime["image"]
+                        or pod.get("imagePullSecrets") != [{"name": "dhi-pull"}]
+                        or len(bootstrap) != 1
+                        or bootstrap[0]["image"] != runtime["image"]
+                        or bootstrap[0]["command"] != ["/bin/sh", "/eps-init/bootstrap-db.sh"]
+                        or any(
+                            e["name"] in {"EPS_DB_PASSWORD", "EPS_EXPORTER_PASSWORD"}
+                            for e in runtime["env"]
+                        )
+                    ):
+                        raise ValueError("Production database image/bootstrap boundary changed")
                 web = next(o for o in objects if o["kind"] == "Deployment")
                 inits = web["spec"]["template"]["spec"].get("initContainers", [])
                 jobs = [o for o in objects if o["kind"] == "Job"]

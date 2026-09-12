@@ -1,6 +1,6 @@
 # Platform installation contract
 
-Installation remains blocked until the ESO image passes the vulnerability gate. Static checks do not prove cloud IAM, network enforcement, token exchange or certificate rotation.
+Reviewed Docker Hardened Image candidates are now pinned for ESO and production PostgreSQL. Their 13 September 2026 image scans and signed-inventory checks passed; private registry access and live compatibility remain installation gates. Static checks do not prove cloud IAM, network enforcement, token exchange or certificate rotation.
 
 ## ESO releases
 
@@ -60,3 +60,13 @@ The `promote` CI job is disabled unless the repository variable `EPS_PROMOTION_E
 Once enabled, successful master runs can update `production` automatically. This changes deployment input; Argo synchronization is still separately controlled. The job reconstructs the expected snapshot from the source commit and same-run image records, rejects extra/modified files, and publishes only `chart/` and `release.json`. Generated render output is checked evidence, not branch content. It checks current master before and immediately after constructing the promotion commit. Normal fast-forward push rejects concurrent production updates; there is no force or overwrite retry. Master can still advance in the brief interval between its final check and the push: this is not an atomic transaction across two branches. Newer runs reconcile later. Keep Argo manual while validating this behavior.
 
 The snapshot's `deployment_ready: false` remains historical preparation status and is not used to authorize promotion. Activation is an explicit operator decision after the live gates. Do not change that field to bypass a failed check. Branch protections are enforced by GitHub; if they reject the Actions token, resolve the protection workflow rather than granting bypass rights. No production branch or GitHub environment is created during local preparation.
+
+## Hardened image bootstrap and registry access
+
+The ESO controller/webhook and production PostgreSQL use reviewed digest references. `dhi-pull` is a pre-existing registry Secret required in both `external-secrets` and `eps`; chart values contain only its name. Create it through the operator workflow using a read-only Docker token supplied privately. Do not copy the entire Docker config, put tokens in command arguments, or ask ESO to fetch its own initial pull credential. Initial registry access is a platform prerequisite, separate from Google Secret Manager authentication. Expiry/rotation of the pull token must be handled before recreating pods. Development defaults remain unchanged and need no DHI login.
+
+With `db.bootstrapRoles: true`, a PostgreSQL init container now initializes fresh storage with native database tools, starts a temporary Unix-socket-only server, creates the existing database/roles, stops it and writes a completion marker. Role changes use a transaction. The ordinary server starts only after success. Application/exporter passwords are provided to the init container only; the runtime retains its existing administrator environment for the vendor entrypoint. This replaces dependence on `/docker-entrypoint-initdb.d`, which Docker's hardened entrypoint does not process.
+
+The bootstrap checks PostgreSQL major 16 and refuses any existing database without its completion marker. A failure does not delete data or retry role creation against a partial database. Never add the marker manually to bypass a failed initialization. Investigate or restore from backup; only disposable rehearsal volumes may be explicitly recreated. This change is not an in-place migration procedure for older EPS volumes. Secret changes do not rotate existing PostgreSQL role passwords automatically.
+
+Before production: use fresh isolated rehearsal storage, verify version/roles/database access and restart behavior with the exact images, and confirm image pulls work after a pod restart. Local shell tests use simulated PostgreSQL commands and prove control flow only. No real database initialization has been executed by the assistant.

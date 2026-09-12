@@ -6,4 +6,6 @@ metadata:
 data:
   init-db.sh: |
 {{ .Files.Get "files/init-db.sh" | indent 4 }}
+  bootstrap-db.sh: |
+{{ .Files.Get "files/bootstrap-db.sh" | indent 4 }}
 {{- end }}

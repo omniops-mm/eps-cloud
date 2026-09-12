@@ -28,6 +28,13 @@ def validate_eso_role_extensions(obj: dict) -> None:
 
 def validate_eso_scope(objects: list[dict], namespace: str) -> None:
     for obj in objects:
+        if obj["kind"] == "Deployment":
+            pod = obj["spec"]["template"]["spec"]
+            if pod.get("imagePullSecrets") != [{"name": "dhi-pull"}] or any(
+                not c["image"].startswith("dhi.io/external-secrets:2.10.0@sha256:")
+                for c in pod["containers"]
+            ):
+                raise ValueError("ESO must use reviewed digest images and private registry access")
         if obj["kind"] in {"ClusterRole", "ClusterRoleBinding"}:
             raise ValueError("ESO must not receive cluster-wide RBAC")
         if obj["kind"] == "Role":

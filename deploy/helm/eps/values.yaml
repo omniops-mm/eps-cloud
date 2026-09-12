@@ -26,6 +26,8 @@ web:
       memory: 256Mi
 
 db:
+  image: postgres:16-alpine
+  imagePullSecrets: []
   bootstrapRoles: false
   adminSecret: eps-db-admin
   exporterSecret: eps-exporter

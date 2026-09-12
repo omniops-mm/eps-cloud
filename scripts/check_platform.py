@@ -13,6 +13,19 @@ ROOT = Path(__file__).resolve().parents[1]
 PLATFORM = ROOT / "deploy/platform"
 
 
+def validate_eso_role_extensions(obj: dict) -> None:
+    labels = obj.get("metadata", {}).get("labels", {})
+    if (
+        any(
+            key.startswith("rbac.authorization.k8s.io/aggregate-to-")
+            and str(value).lower() == "true"
+            for key, value in labels.items()
+        )
+        or str(labels.get("servicebinding.io/controller", "false")).lower() == "true"
+    ):
+        raise ValueError("Unexpected ESO default-role or service-binding permissions")
+
+
 def main() -> None:
     pins = json.loads((PLATFORM / "versions.json").read_text(encoding="utf-8"))
     schemas = {}
@@ -55,6 +68,8 @@ def main() -> None:
             for obj in yaml.safe_load_all(output):
                 if not obj:
                     continue
+                if name == "external-secrets":
+                    validate_eso_role_extensions(obj)
                 if obj["kind"] == "CustomResourceDefinition":
                     spec = obj["spec"]
                     for version in spec["versions"]:

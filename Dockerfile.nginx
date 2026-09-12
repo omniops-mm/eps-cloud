@@ -1,8 +1,6 @@
-# Pinned to a minor version, so a rebuild next month produces the same nginx.
-# The pin still has to move when the base stops receiving fixes: 1.27-alpine
-# sat on an Alpine whose OpenSSL had a fixed CVE outstanding, and the image scan
-# in CI is what surfaces that. Bumping the base is the fix, not suppressing it.
-FROM nginx:1.30-alpine
+# The official slim variant supplies the proxy modules used by nginx.conf.
+# Pin the reviewed content; refresh the digest when security updates are needed.
+FROM nginx:1.30-alpine-slim@sha256:77da26c31397bf6694b4bf93275f5b40b0b120ba1b8f114264b603e592c561d6
 
 COPY nginx.conf /etc/nginx/nginx.conf
 

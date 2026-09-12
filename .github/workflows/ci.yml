@@ -146,6 +146,13 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
+      - name: Validate nginx configuration in the built image
+        if: matrix.image == 'nginx'
+        # nginx -t resolves the upstream name but does not need a running app.
+        run: >-
+          docker run --rm --network none --add-host web:127.0.0.1
+          eps-nginx:${{ github.sha }} nginx -t
+
       - name: Scan for known vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:

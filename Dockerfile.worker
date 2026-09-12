@@ -15,7 +15,7 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY app ./app
 COPY worker ./worker
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/app/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1
 USER eps
 EXPOSE 9100
 CMD ["python", "-m", "worker.scheduler"]

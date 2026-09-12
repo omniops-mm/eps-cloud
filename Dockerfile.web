@@ -21,7 +21,7 @@ COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 # so a fresh install can populate example data without a dev checkout
 COPY seed.py ./seed.py
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/app/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1
 USER eps
 EXPOSE 8000
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "app:create_app()"]

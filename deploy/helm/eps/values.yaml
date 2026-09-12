@@ -47,3 +47,9 @@ hpa:
   minReplicas: 2
   maxReplicas: 6
   targetCPUPercent: 70
+
+# Local HTTP remains supported; production enables secure cookies later.
+secureCookies: false
+argocd: false
+migration:
+  mode: init

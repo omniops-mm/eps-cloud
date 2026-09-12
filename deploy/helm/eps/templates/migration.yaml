@@ -1,0 +1,37 @@
+{{- if eq .Values.migration.mode "job" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: eps-migrate
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels: {app: migrate}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: migrate
+          image: {{ .Values.image.registry }}/web:{{ .Values.image.tag }}
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - secretRef: {name: {{ .Values.existingSecret }}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+{{- end }}

@@ -1,22 +1,20 @@
+# Source: eps/templates/ingress.yaml
 # Routing rule for the cluster's ingress controller. This replaces the compose
 # nginx tier; the controller is the reverse proxy, installed once per cluster.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: web
-  namespace: eps
   annotations:
     # cert-manager watches for this and keeps a certificate in the tls secret.
     cert-manager.io/cluster-issuer: selfsigned
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   tls:
     - hosts:
         - eps.localtest.me
       secretName: eps-tls
   rules:
-    # localtest.me and its subdomains resolve to 127.0.0.1 in public DNS.
-    # Offline fallback is one hosts-file line.
     - host: eps.localtest.me
       http:
         paths:

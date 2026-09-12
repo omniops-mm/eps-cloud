@@ -1,85 +1,85 @@
-# The two background jobs, run by the platform instead of the worker's own
-# scheduler. Each firing creates a Job, which runs one pod to completion.
+# Source: eps/templates/cronjobs.yaml
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: refresh-weather
-  namespace: eps
 spec:
   schedule: "0 6 * * *"
   timeZone: Europe/Berlin
-  # Never run two of the same job at once.
   concurrencyPolicy: Forbid
-  # A stopped cluster misses schedules. A missed firing starts if it is less
-  # than an hour late, otherwise it is skipped.
   startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
   jobTemplate:
     spec:
-      # Two retries, each in a fresh pod with its own log.
       backoffLimit: 2
+      activeDeadlineSeconds: 600
       template:
         metadata:
-          labels:
-            app: jobs
+          labels: {app: jobs}
         spec:
           restartPolicy: Never
+          automountServiceAccountToken: false
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile: {type: RuntimeDefault}
           containers:
             - name: refresh-weather
               image: ghcr.io/omniops-mm/eps-cloud/worker:9230464b35605b1c1e695787d7a671493522372b
               command: ["python", "-m", "worker.jobs", "refresh-weather"]
               envFrom:
-                - secretRef:
-                    name: eps
+                - secretRef: {name: eps}
               env:
-                - name: TZ
-                  value: Europe/Berlin
+                - {name: TZ, value: "Europe/Berlin"}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                readOnlyRootFilesystem: true
               resources:
-                requests:
-                  cpu: 50m
-                  memory: 64Mi
-                limits:
-                  cpu: 250m
-                  memory: 128Mi
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 250m, memory: 128Mi}
 ---
+# Source: eps/templates/cronjobs.yaml
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: cleanup-audit-log
-  namespace: eps
 spec:
   schedule: "0 3 * * *"
   timeZone: Europe/Berlin
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
   jobTemplate:
     spec:
       backoffLimit: 2
+      activeDeadlineSeconds: 600
       template:
         metadata:
-          labels:
-            app: jobs
+          labels: {app: jobs}
         spec:
           restartPolicy: Never
+          automountServiceAccountToken: false
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile: {type: RuntimeDefault}
           containers:
             - name: cleanup-audit-log
               image: ghcr.io/omniops-mm/eps-cloud/worker:9230464b35605b1c1e695787d7a671493522372b
               command: ["python", "-m", "worker.jobs", "cleanup-audit-log"]
               envFrom:
-                - secretRef:
-                    name: eps
+                - secretRef: {name: eps}
               env:
-                - name: TZ
-                  value: Europe/Berlin
+                - {name: TZ, value: "Europe/Berlin"}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                readOnlyRootFilesystem: true
               resources:
-                requests:
-                  cpu: 50m
-                  memory: 64Mi
-                limits:
-                  cpu: 250m
-                  memory: 128Mi
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 250m, memory: 128Mi}

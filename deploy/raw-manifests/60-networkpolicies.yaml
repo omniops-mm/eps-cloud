@@ -1,80 +1,140 @@
-# Inbound rules for the namespace: the ingress controller is the only way in,
-# the db accepts connections from the app pods only, job pods accept none.
-#
-# NetworkPolicies are allowlists. Once any policy selects a pod for a
-# direction, everything not explicitly allowed in that direction is denied.
-# The first policy selects every pod for ingress, the rest punch the holes.
-#
-# ponytail: ingress only. An egress allowlist would have to enumerate DNS and
-# BrightSky for little value on a local cluster; add it when the cluster
-# faces the internet.
+# Source: eps/templates/networkpolicies.yaml
+# Default deny both directions. Public HTTPS excludes private and link-local addresses.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: default-deny-ingress
-  namespace: eps
+  name: default-deny
 spec:
   podSelector: {}
   policyTypes:
-    - Ingress
+  - Ingress
+  - Egress
 ---
-# Postgres accepts 5432 from the web and job pods only.
+# Source: eps/templates/networkpolicies.yaml
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: db-from-app-only
-  namespace: eps
+  name: dns
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+---
+# Source: eps/templates/networkpolicies.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-from-app
 spec:
   podSelector:
     matchLabels:
       app: db
   policyTypes:
-    - Ingress
+  - Ingress
   ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: web
-        - podSelector:
-            matchLabels:
-              app: jobs
-      ports:
-        - protocol: TCP
-          port: 5432
+  - from:
+    - podSelector:
+        matchExpressions:
+        - key: app
+          operator: In
+          values:
+          - web
+          - jobs
+          - migrate
+    ports:
+    - protocol: TCP
+      port: 5432
 ---
-# Web accepts 8000 from the ingress controller's namespace only. The
-# namespaceSelector uses the name label the control plane stamps on every
-# namespace. A monitoring hole is added when monitoring moves in-cluster.
+# Source: eps/templates/networkpolicies.yaml
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: web-from-proxy-only
-  namespace: eps
+  name: app-outbound
+spec:
+  podSelector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - web
+      - jobs
+      - migrate
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: db
+    ports:
+    - protocol: TCP
+      port: 5432
+---
+# Source: eps/templates/networkpolicies.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: weather-https
+spec:
+  podSelector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - web
+      - jobs
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 0.0.0.0/8
+        - 10.0.0.0/8
+        - 100.64.0.0/10
+        - 127.0.0.0/8
+        - 169.254.0.0/16
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+        - 224.0.0.0/4
+        - 240.0.0.0/4
+    ports:
+    - protocol: TCP
+      port: 443
+---
+# Source: eps/templates/networkpolicies.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-from-proxy
 spec:
   podSelector:
     matchLabels:
       app: web
   policyTypes:
-    - Ingress
+  - Ingress
   ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
-      ports:
-        - protocol: TCP
-          port: 8000
----
-# Job pods take nothing inbound. Redundant next to default-deny, written out
-# so the guarantee survives if the default-deny is ever deleted.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: jobs-no-inbound
-  namespace: eps
-spec:
-  podSelector:
-    matchLabels:
-      app: jobs
-  policyTypes:
-    - Ingress
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: traefik
+    ports:
+    - protocol: TCP
+      port: 8000

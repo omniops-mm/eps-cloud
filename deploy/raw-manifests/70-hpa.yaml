@@ -1,8 +1,8 @@
+# Source: eps/templates/hpa.yaml
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: web
-  namespace: eps
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

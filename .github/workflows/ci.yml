@@ -311,3 +311,37 @@ jobs:
           path: release-snapshot/
           if-no-files-found: error
           retention-days: 30
+
+  promote:
+    needs: release-snapshot
+    # Keep the repository variable absent/false until image and live gates clear.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.EPS_PROMOTION_ENABLED == 'true'
+    environment: eps-production
+    concurrency:
+      group: eps-production-promotion
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-snapshot
+          path: release-snapshot
+      - uses: actions/download-artifact@v4
+        with:
+          name: image-digest-web
+          path: release-records
+      - uses: actions/download-artifact@v4
+        with:
+          name: image-digest-worker
+          path: release-records
+      - name: Rebuild, compare and publish the checked snapshot
+        env:
+          EPS_PROMOTION_ENABLED: ${{ vars.EPS_PROMOTION_ENABLED }}
+        run: uv run python -m scripts.promote

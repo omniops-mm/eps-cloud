@@ -72,7 +72,9 @@ def prepare_snapshot(
             "webDigest": images["web"].split("@", 1)[1],
             "workerDigest": images["worker"].split("@", 1)[1],
         }
-        values_path.write_text(yaml.safe_dump(values, sort_keys=False), encoding="utf-8")
+        values_path.write_text(
+            yaml.safe_dump(values, sort_keys=False), encoding="utf-8", newline="\n"
+        )
         (staging / "release.json").write_text(
             json.dumps(
                 {
@@ -86,6 +88,7 @@ def prepare_snapshot(
             )
             + "\n",
             encoding="utf-8",
+            newline="\n",
         )
         staging.rename(output)
 

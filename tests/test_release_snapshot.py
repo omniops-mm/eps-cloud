@@ -42,6 +42,8 @@ def test_release_snapshot(tmp_path, monkeypatch):
     output = tmp_path / "snapshot"
     prepare_snapshot(root, records, output, repository, commit, "123", "1")
     values = yaml.safe_load((output / "chart/values-production.yaml").read_text())
+    assert b"\r\n" not in (output / "chart/values-production.yaml").read_bytes()
+    assert b"\r\n" not in (output / "release.json").read_bytes()
     assert values["image"]["webDigest"] == "sha256:" + "b" * 64
     assert values["image"]["workerDigest"] == "sha256:" + "b" * 64
     assert json.loads((output / "release.json").read_text())["deployment_ready"] is False

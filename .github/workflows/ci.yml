@@ -182,6 +182,22 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
 
+      - name: Create image software inventory (SBOM)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: eps-${{ matrix.image }}:${{ github.sha }}
+          format: cyclonedx
+          output: sbom-${{ matrix.image }}.cdx.json
+          exit-code: "0"
+
+      - name: Upload image software inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-sbom-${{ matrix.image }}
+          path: sbom-${{ matrix.image }}.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Log in to the registry
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/login-action@v3

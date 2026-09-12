@@ -32,7 +32,7 @@ spec:
             seccompProfile: {type: RuntimeDefault}
           containers:
             - name: {{ .name }}
-              image: {{ $.Values.image.registry }}/worker:{{ $.Values.image.tag }}
+              image: {{ $.Values.image.registry }}/worker{{ if $.Values.image.workerDigest }}@{{ $.Values.image.workerDigest }}{{ else }}:{{ $.Values.image.tag }}{{ end }}
               command: ["python", "-m", "worker.jobs", {{ .name | quote }}]
               envFrom:
                 - secretRef: {name: {{ $.Values.existingSecret }}}

@@ -2,6 +2,9 @@
 # templates, same as the raw manifests.
 
 image:
+  # Release snapshots set these; local examples may still use the commit tag.
+  webDigest: ""
+  workerDigest: ""
   registry: ghcr.io/omniops-mm/eps-cloud
   # Full commit sha, the tag CI publishes. Never latest.
   tag: 9230464b35605b1c1e695787d7a671493522372b

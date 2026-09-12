@@ -46,3 +46,9 @@ The GitOps-only values layer reuses the existing migration Job: database wave 0,
 Before enabling automation, prove failed-migration blocking, retained database storage, replica ownership and rollback in the isolated rehearsal. Rolling back application code does not undo database migrations.
 
 References: [Argo projects](https://argo-cd.readthedocs.io/en/stable/user-guide/projects/), [sync waves](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-waves/), [sync options](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/).
+
+## Release snapshot artifact
+
+After all image signing/verification jobs succeed on a master push, CI creates `release-snapshot`: a chart copied from that exact Git commit, web/worker digests from the same run and attempt, release metadata, and a checked GitOps render. The chart supports digest references for web, its migration, and worker jobs; ordinary local examples retain commit tags. Kubernetes uses its ingress controller, so the separately published Compose nginx image is not inserted into this chart.
+
+The snapshot job has read-only repository permissions and does not create or update `production`. `deployment_ready: false` records the remaining platform-image and live-validation gates; it is a status marker, not an access control. No cloud credentials or secret payloads are included by the generator. Chart source must still pass review and secret checks. Download artifacts only from the intended successful trusted run: running the generator with arbitrary JSON is not signature verification. Promotion must later recheck the source is still current, preserve branch protections, and publish the complete snapshot atomically. Automatic deployment remains disabled.

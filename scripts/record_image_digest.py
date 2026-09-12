@@ -16,6 +16,21 @@ def published_reference(remote_image: str, repo_digests: list[str]) -> str:
     return matches[0]
 
 
+def validate_record(
+    record: dict, repository: str, name: str, commit: str, run_id: str, run_attempt: str
+) -> str:
+    """Bind a digest record to one image and one release run."""
+    tag = f"ghcr.io/{repository}/{name}:{commit}"
+    if (
+        record.get("commit") != commit
+        or record.get("tag") != tag
+        or record.get("run_id") != run_id
+        or record.get("run_attempt") != run_attempt
+    ):
+        raise ValueError("Image record does not belong to this release run")
+    return published_reference(tag, [record["image"]])
+
+
 def main() -> None:
     remote_image = os.environ["REMOTE_IMAGE"]
     digests = json.loads(

@@ -23,7 +23,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: migrate
-          image: {{ .Values.image.registry }}/web:{{ .Values.image.tag }}
+          image: {{ .Values.image.registry }}/web{{ if .Values.image.webDigest }}@{{ .Values.image.webDigest }}{{ else }}:{{ .Values.image.tag }}{{ end }}
           command: ["alembic", "upgrade", "head"]
           envFrom:
             - secretRef: {name: {{ .Values.existingSecret }}}

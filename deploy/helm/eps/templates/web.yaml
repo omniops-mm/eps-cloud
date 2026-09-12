@@ -37,7 +37,7 @@ spec:
       {{- if eq .Values.migration.mode "init" }}
       initContainers:
         - name: migrate
-          image: {{ .Values.image.registry }}/web:{{ .Values.image.tag }}
+          image: {{ .Values.image.registry }}/web{{ if .Values.image.webDigest }}@{{ .Values.image.webDigest }}{{ else }}:{{ .Values.image.tag }}{{ end }}
           command: ["alembic", "upgrade", "head"]
           envFrom:
             - secretRef: {name: {{ .Values.existingSecret }}}
@@ -53,7 +53,7 @@ spec:
       {{- end }}
       containers:
         - name: web
-          image: {{ .Values.image.registry }}/web:{{ .Values.image.tag }}
+          image: {{ .Values.image.registry }}/web{{ if .Values.image.webDigest }}@{{ .Values.image.webDigest }}{{ else }}:{{ .Values.image.tag }}{{ end }}
           ports:
             - {name: http, containerPort: 8000}
           envFrom:

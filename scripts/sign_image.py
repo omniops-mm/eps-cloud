@@ -5,7 +5,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from scripts.record_image_digest import published_reference
+from scripts.record_image_digest import validate_record
 
 
 def main() -> None:
@@ -13,15 +13,14 @@ def main() -> None:
     commit = os.environ["GITHUB_SHA"]
     repository = os.environ["GITHUB_REPOSITORY"]
     record = json.loads(Path(f"image-{name}.json").read_text(encoding="utf-8"))
-    tag = f"ghcr.io/{repository}/{name}:{commit}"
-    if (
-        record["commit"] != commit
-        or record["tag"] != tag
-        or record["run_id"] != os.environ["GITHUB_RUN_ID"]
-        or record["run_attempt"] != os.environ["GITHUB_RUN_ATTEMPT"]
-    ):
-        raise ValueError("Image record does not belong to this release run")
-    image = published_reference(tag, [record["image"]])
+    image = validate_record(
+        record,
+        repository,
+        name,
+        commit,
+        os.environ["GITHUB_RUN_ID"],
+        os.environ["GITHUB_RUN_ATTEMPT"],
+    )
     identity = f"https://github.com/{repository}/.github/workflows/ci.yml@refs/heads/master"
     subprocess.run(["cosign", "sign", "--yes", image], check=True)
     with Path(f"verified-{name}.json").open("w", encoding="utf-8") as output:

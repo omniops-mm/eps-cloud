@@ -23,6 +23,9 @@ web:
       memory: 256Mi
 
 db:
+  bootstrapRoles: false
+  adminSecret: eps-db-admin
+  exporterSecret: eps-exporter
   storage: 1Gi
   resources:
     requests:

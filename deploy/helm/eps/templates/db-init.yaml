@@ -1,0 +1,9 @@
+{{- if .Values.db.bootstrapRoles }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-init
+data:
+  init-db.sh: |
+{{ .Files.Get "files/init-db.sh" | indent 4 }}
+{{- end }}

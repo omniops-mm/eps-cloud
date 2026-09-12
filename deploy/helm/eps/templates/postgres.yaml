@@ -44,15 +44,26 @@ spec:
             - {name: postgres, containerPort: 5432}
           env:
             - {name: POSTGRES_DB, value: eps}
-            - {name: POSTGRES_USER, value: eps}
+            - {name: POSTGRES_USER, value: {{ ternary "eps_admin" "eps" .Values.db.bootstrapRoles }}}
             - name: POSTGRES_PASSWORD
               valueFrom:
+                secretKeyRef: {name: {{ ternary .Values.db.adminSecret .Values.existingSecret .Values.db.bootstrapRoles }}, key: POSTGRES_PASSWORD}
+            {{- if .Values.db.bootstrapRoles }}
+            - name: EPS_DB_PASSWORD
+              valueFrom:
                 secretKeyRef: {name: {{ .Values.existingSecret }}, key: POSTGRES_PASSWORD}
+            - name: EPS_EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.db.exporterSecret }}, key: password}
+            {{- end }}
             - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: {drop: [ALL]}
           volumeMounts:
+            {{- if .Values.db.bootstrapRoles }}
+            - {name: init, mountPath: /docker-entrypoint-initdb.d, readOnly: true}
+            {{- end }}
             - {name: data, mountPath: /var/lib/postgresql/data}
             - {name: run, mountPath: /var/run/postgresql}
           readinessProbe:
@@ -65,6 +76,10 @@ spec:
             periodSeconds: 20
           resources: {{- .Values.db.resources | toYaml | nindent 12 }}
       volumes:
+        {{- if .Values.db.bootstrapRoles }}
+        - name: init
+          configMap: {name: db-init}
+        {{- end }}
         - name: run
           emptyDir: {sizeLimit: 16Mi}
   volumeClaimTemplates:

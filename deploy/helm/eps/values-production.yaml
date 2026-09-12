@@ -1,0 +1,9 @@
+# Supply web and worker digests from a successful trusted CI run.
+secureCookies: true
+db:
+  bootstrapRoles: true
+  storage: 8Gi
+web:
+  replicas: 2
+hpa:
+  maxReplicas: 4

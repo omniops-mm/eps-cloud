@@ -299,6 +299,8 @@ def add_task() -> Response:
 
     # "due" makes the date a deadline, "planned" a scheduled day
     kind = request.form.get("kind", "planned")
+    if kind not in {"due", "planned"}:
+        abort(400)
     task = Task(
         name=name,
         deadline=date if kind == "due" else None,

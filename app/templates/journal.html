@@ -118,6 +118,7 @@
   <div class="note-foot">
     <span class="note-status" id="note-status"></span>
     <form class="badday-form" method="post" action="/journal/{{ day.isoformat() }}/badday">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="badday-btn {{ 'is-active' if bad_day }}" type="submit"
               aria-pressed="{{ 'true' if bad_day else 'false' }}">
         {{ "Bad day" if bad_day else "Mark as a bad day" }}

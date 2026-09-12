@@ -6,10 +6,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", hide_input_in_errors=True)
 
     database_url: str
     secret_key: str
+    secure_cookies: bool = False
     # IANA timezone name. Dates shown to the user are computed in this zone,
     # not in the server's clock, which runs UTC inside containers.
     tz: str = "Europe/Berlin"
@@ -18,5 +19,5 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     """Cached singleton. Import this, not Settings() directly."""
-    # This is here so that mypy does not get in the way. whole point is to not have to write in env vars
+    # BaseSettings fills required fields from the environment.
     return Settings()  # type: ignore[call-arg]

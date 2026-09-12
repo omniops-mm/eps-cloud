@@ -26,6 +26,7 @@
     <section class="card">
       <h2 class="card-title">Daily fetches</h2>
       <form class="pref-form" method="post" action="{{ url_for('settings.save_fetch_times') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="pref-row">
           <label class="pref-label" for="calendar-fetch">
             Calendar
@@ -56,6 +57,7 @@
     <section class="card">
       <h2 class="card-title">Weather location</h2>
       <form class="pref-form" method="post" action="{{ url_for('settings.save_weather') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="pref-row">
           <label class="pref-label" for="lat">Latitude</label>
           <input class="pref-input" id="lat" type="number" name="lat" step="0.0001"
@@ -81,6 +83,7 @@
     <section class="card">
       <h2 class="card-title">Timezone</h2>
       <form class="pref-form" method="post" action="{{ url_for('settings.save_timezone') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="pref-row pref-row-wide">
           <label class="pref-label" for="timezone">
             Zone

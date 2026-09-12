@@ -34,6 +34,7 @@
         </div>
 
         <form class="add-form add-form-task" method="post" action="/tasks/add">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="text" name="name" placeholder="What needs doing?" required>
           <div class="add-row">
             <label class="add-kind"><input type="radio" name="kind" value="planned" checked><span>Scheduled</span></label>
@@ -50,12 +51,14 @@
         </form>
 
         <form class="add-form add-form-streak" method="post" action="/add/streak">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="text" name="name" placeholder="Habit to keep, e.g. no sugar" required>
           <input type="text" name="description" placeholder="Description (optional)">
           <div class="add-row"><button type="submit">Add habit</button></div>
         </form>
 
         <form class="add-form add-form-tracker" method="post" action="/add/tracker">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="text" name="name" placeholder="Activity, e.g. water the plants" required>
           <div class="add-row">
             <label class="add-inline">Due again
@@ -76,6 +79,7 @@
         </form>
 
         <form class="add-form add-form-metric" method="post" action="/add/metric">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="text" name="name" placeholder="Metric, e.g. sleep" required>
           <div class="add-row">
             <label class="add-kind"><input type="radio" name="metric_type" value="scale" checked><span>1-5 scale</span></label>

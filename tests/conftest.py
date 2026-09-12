@@ -7,9 +7,12 @@ declare portable column types for exactly this reason.
 
 import datetime
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
+from flask import g
 from flask.testing import FlaskClient
+from flask_wtf.csrf import generate_csrf
 from prometheus_client import REGISTRY
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -137,8 +140,30 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[FlaskClient]:
     monkeypatch.setattr("app.db.get_engine", lambda: engine)
 
     app = create_app()
+
+    def test_csrf_token() -> str:
+        # This fixture retains an app context; real requests get a fresh g.
+        g.pop("csrf_token", None)
+        return generate_csrf()
+
+    app.add_url_rule("/_test/csrf", view_func=test_csrf_token)
+
+    class FormClient(FlaskClient):
+        def open(self, *args: Any, **kwargs: Any) -> Any:
+            include_csrf = kwargs.pop("include_csrf", True)
+            if include_csrf and kwargs.get("method", "GET").upper() in {
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE",
+            }:
+                headers = dict(kwargs.get("headers") or {})
+                headers.setdefault("X-CSRFToken", self.get("/_test/csrf").get_data(as_text=True))
+                kwargs["headers"] = headers
+            return super().open(*args, **kwargs)
+
     with app.app_context():
-        yield app.test_client()
+        yield FormClient(app)
     db_session.remove()
     get_settings.cache_clear()
 

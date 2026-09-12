@@ -104,23 +104,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: helm lint
-        run: >
-          docker run --rm -v $PWD/deploy/helm:/charts:ro
-          alpine/helm:4.2.3 lint /charts/eps
-      - name: kubeconform validates the raw manifests
-        # the secret example is skipped by its extension; cluster-issuer.yaml
-        # is a cert-manager CRD instance with no schema in the default registry
-        run: >
-          docker run --rm -v $PWD/deploy/raw-manifests:/manifests:ro
-          ghcr.io/yannh/kubeconform:v0.8.0 -strict -summary /manifests
-      - name: kubeconform validates the rendered chart
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - name: Install checksum-verified CI tools
+        run: uv run python scripts/install_ci_tools.py
+      - name: Lint development and production charts
         run: |
-          docker run --rm -v $PWD/deploy/helm:/charts:ro alpine/helm:4.2.3 template eps /charts/eps > rendered.yaml
-          docker run --rm -v $PWD:/work:ro ghcr.io/yannh/kubeconform:v0.8.0 -strict -summary /work/rendered.yaml
+          helm lint deploy/helm/eps
+          helm lint deploy/helm/eps -f deploy/helm/eps/values-production.yaml
+      - name: Validate raw Kubernetes resources
+        run: >-
+          kubeconform -strict -summary -kubernetes-version 1.36.3
+          deploy/raw-manifests
+      - name: Validate chart variants and security controls
+        run: uv run python scripts/check_deploy.py
 
   images:
-    needs: [lint, types, tests, migrations]
+    needs: [lint, types, tests, migrations, monitoring-config, deploy-config]
     runs-on: ubuntu-latest
     permissions:
       contents: read

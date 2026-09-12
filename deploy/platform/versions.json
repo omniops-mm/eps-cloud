@@ -1,0 +1,14 @@
+{
+  "cert-manager": {
+    "repository": "https://charts.jetstack.io",
+    "version": "v1.21.2",
+    "appVersion": "v1.21.2",
+    "sha256": "73a56e1728edd6c99f1f31082618c3259d279a76b7ebd3d4bdc5475c2442d34a"
+  },
+  "external-secrets": {
+    "repository": "https://charts.external-secrets.io",
+    "version": "2.10.0",
+    "appVersion": "v2.10.0",
+    "sha256": "b96e948fff3674638b5d3f9e43886f3796e04739c4b4127929aed2ddac7d1418"
+  }
+}

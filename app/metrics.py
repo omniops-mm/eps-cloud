@@ -9,6 +9,8 @@ import time
 from flask import Flask, Response, request
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
+HTTP_METHODS = {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "CONNECT", "TRACE"}
+
 REQUESTS = Counter(
     "eps_http_requests_total",
     "HTTP requests handled, by method, route pattern and status code.",
@@ -38,7 +40,8 @@ def init_app(app: Flask) -> None:
         route = request.url_rule.rule if request.url_rule else "unmatched"
         if route in UNCOUNTED_ROUTES:
             return response
-        REQUESTS.labels(request.method, route, response.status_code).inc()
+        method = request.method if request.method in HTTP_METHODS else "OTHER"
+        REQUESTS.labels(method, route, response.status_code).inc()
         started = getattr(request, "start_time", None)
         if started is not None:
             LATENCY.labels(route).observe(time.perf_counter() - started)

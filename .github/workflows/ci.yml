@@ -120,6 +120,8 @@ jobs:
           deploy/raw-manifests
       - name: Validate chart variants and security controls
         run: uv run python scripts/check_deploy.py
+      - name: Validate pinned platform charts and custom resources
+        run: uv run python scripts/check_platform.py
 
   images:
     needs: [lint, types, tests, migrations, monitoring-config, deploy-config]

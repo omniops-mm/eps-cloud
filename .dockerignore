@@ -7,3 +7,19 @@ __pycache__
 .mypy_cache
 .ruff_cache
 docs
+# Private environment files and recovery data.
+.env.*
+!.env.example
+*.local.yaml
+private/
+credentials*.json
+*service-account*.json
+*kubeconfig*
+*.dump
+*.sql.gz
+*.backup
+*.tfstate*
+.terraform/
+*.tfvars
+*.p12
+*.pfx

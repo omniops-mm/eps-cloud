@@ -37,8 +37,7 @@ extend-select = ["I", "UP"]
 python_version = "3.12"
 check_untyped_defs = true
 
-# APScheduler ships no type information, so the alternative to this is a
-# hand-written stub for the two classes we touch. Scoped to that package only.
+# These dependencies do not provide complete type annotations or installed stubs.
 [[tool.mypy.overrides]]
 module = ["apscheduler.*", "flask_wtf.*", "yaml.*", "jsonschema.*"]
 ignore_missing_imports = true

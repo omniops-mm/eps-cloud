@@ -113,6 +113,14 @@ resource "google_compute_instance" "eps" {
     block-project-ssh-keys   = "TRUE"
     disable-legacy-endpoints = "TRUE"
     serial-port-enable       = "FALSE"
+    # Publish only the public host key for verification through the authenticated Compute API.
+    startup-script = replace(<<-SCRIPT
+      #!/bin/sh
+      set -eu
+      printf 'EPS_SSH_HOST_KEY ' > /dev/ttyS0
+      cat /etc/ssh/ssh_host_ed25519_key.pub >> /dev/ttyS0
+    SCRIPT
+    , "\r\n", "\n")
   }
   shielded_instance_config {
     enable_secure_boot          = true

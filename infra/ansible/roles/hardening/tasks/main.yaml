@@ -1,5 +1,5 @@
 ---
-- name: Install host utilities and current Debian security updates.
+- name: Install host utilities.
   ansible.builtin.apt:
     name:
       - ca-certificates
@@ -8,6 +8,9 @@
     state: present
     update_cache: true
     cache_valid_time: 3600
+
+- name: Apply current Debian security updates.
+  ansible.builtin.apt:
     upgrade: safe
 
 - name: Disable password login while preserving OS Login integration.

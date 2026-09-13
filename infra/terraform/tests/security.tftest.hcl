@@ -30,3 +30,14 @@ run "isolated_lab_requires_explicit_exception" {
     error_message = "Private destinations must be denied before web egress; all remaining egress must be denied."
   }
 }
+
+run "host_key_bootstrap_uses_linux_line_endings" {
+  command = plan
+  variables {
+    lab_exception = true
+  }
+  assert {
+    condition = !strcontains(google_compute_instance.eps.metadata["startup-script"], "\r") && strcontains(google_compute_instance.eps.metadata["startup-script"], "/etc/ssh/ssh_host_ed25519_key.pub")
+    error_message = "The bootstrap must use Linux line endings and publish only the public SSH host key."
+  }
+}

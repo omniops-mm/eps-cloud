@@ -46,3 +46,46 @@ def test_security_regressions_are_rejected():
     changed["automountServiceAccountToken"] = True
     with pytest.raises(ValueError, match="Unsafe pod"):
         validate_objects(objects(changed))
+
+
+def test_host_configuration_regressions_are_rejected():
+    from pathlib import Path
+
+    import yaml
+
+    from scripts.check_deploy import validate_host_configs
+
+    root = Path(__file__).resolve().parents[1]
+    documents = [
+        yaml.safe_load((root / path).read_text())
+        for path in (
+            "deploy/k3d.yaml",
+            "deploy/platform/k3s-config.yaml",
+            "deploy/platform/traefik.yaml",
+        )
+    ]
+    validate_host_configs(*documents)
+    for index, change in (
+        (0, {"kubeAPI": {"hostIP": "0.0.0.0"}}),
+        (0, {"ports": [{"port": "8080:80"}]}),
+        (1, {"secrets-encryption": False}),
+        (1, {"write-kubeconfig-mode": "0644"}),
+        (1, {"disable": []}),
+    ):
+        changed = deepcopy(documents)
+        changed[index].update(change)
+        with pytest.raises(ValueError, match="Unsafe cluster"):
+            validate_host_configs(*changed)
+    for ingress_change in (
+        {"service": {"type": "LoadBalancer"}},
+        {"service": {"type": "ClusterIP", "externalIPs": ["192.0.2.1"]}},
+        {"hostNetwork": True},
+        {"ports": {"web": {"hostPort": 80}}},
+        {"logs": {"access": {"enabled": True}}},
+    ):
+        changed = deepcopy(documents)
+        values = yaml.safe_load(changed[2]["spec"]["valuesContent"])
+        values.update(ingress_change)
+        changed[2]["spec"]["valuesContent"] = yaml.safe_dump(values)
+        with pytest.raises(ValueError, match="Traefik"):
+            validate_host_configs(*changed)

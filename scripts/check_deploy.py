@@ -9,6 +9,32 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def validate_host_configs(cluster: dict, server: dict, ingress: dict) -> None:
+    """Keep local listeners private and the VM's bundled ingress internal."""
+    if (
+        cluster.get("kubeAPI", {}).get("hostIP") != "127.0.0.1"
+        or any(
+            not port.get("port", "").startswith("127.0.0.1:") for port in cluster.get("ports", [])
+        )
+        or server.get("secrets-encryption") is not True
+        or server.get("write-kubeconfig-mode") != "0600"
+        or "servicelb" not in server.get("disable", [])
+    ):
+        raise ValueError("Unsafe cluster listener, encryption or kubeconfig settings")
+    values = yaml.safe_load(ingress["spec"]["valuesContent"])
+    service = values.get("service", {})
+    if (
+        ingress.get("metadata", {}).get("namespace") != "kube-system"
+        or ingress.get("metadata", {}).get("name") != "traefik"
+        or service.get("type") != "ClusterIP"
+        or service.get("externalIPs")
+        or values.get("hostNetwork")
+        or any(port.get("hostPort") for port in values.get("ports", {}).values())
+        or values.get("logs", {}).get("access", {}).get("enabled") is not False
+    ):
+        raise ValueError("Traefik must keep ingress internal and access logging disabled")
+
+
 def validate_objects(objects: list[dict]) -> None:
     """Reject regressions in the app's existing pod security boundary."""
     for obj in objects:
@@ -128,6 +154,11 @@ def validate_gitops(objects: list[dict]) -> None:
 
 
 def main() -> None:
+    validate_host_configs(
+        yaml.safe_load((ROOT / "deploy/k3d.yaml").read_text()),
+        yaml.safe_load((ROOT / "deploy/platform/k3s-config.yaml").read_text()),
+        yaml.safe_load((ROOT / "deploy/platform/traefik.yaml").read_text()),
+    )
     chart = str(ROOT / "deploy/helm/eps")
     with tempfile.TemporaryDirectory(prefix="eps-deploy-check-") as temporary:
         work = Path(temporary)

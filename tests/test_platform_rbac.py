@@ -184,3 +184,25 @@ def test_native_dashboard_configmap_preserves_sources():
         source = (ROOT / "deploy/helm/eps/dashboards" / name).read_text(encoding="utf-8")
         assert json.loads(value) == json.loads(source.replace("__EPS_NAMESPACE__", "eps"))
         assert "__EPS_NAMESPACE__" not in value
+
+
+def test_local_observability_disables_ingress_and_schedules():
+    from scripts.rehearse_observability import rehearsal_objects
+
+    source = """kind: Ingress
+metadata: {name: web}
+---
+kind: CronJob
+metadata: {name: refresh-weather}
+spec: {schedule: '0 6 * * *'}
+---
+kind: Service
+metadata: {name: web}
+spec: {type: ClusterIP}
+"""
+    objects = rehearsal_objects(source)
+    assert [obj["kind"] for obj in objects] == ["CronJob", "Service"]
+    assert objects[0]["spec"]["suspend"] is True
+    assert all(obj["metadata"]["namespace"] == "eps" for obj in objects)
+    with pytest.raises(ValueError, match="escaped"):
+        rehearsal_objects("kind: Service\nmetadata: {name: web, namespace: production}")

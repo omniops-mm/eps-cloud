@@ -1,0 +1,19 @@
+---
+- name: Configure the EPS host.
+  hosts: eps
+  become: true
+  gather_facts: true
+  vars:
+    eps_host_versions: "{{ lookup('ansible.builtin.file', playbook_dir + '/../../deploy/platform/host-versions.json') | from_json }}"
+  pre_tasks:
+    - name: Require a supported host and an accepted k3s release.
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Debian'
+          - ansible_facts.distribution_major_version == '13'
+          - ansible_facts.architecture == 'x86_64'
+          - eps_host_versions.k3s.approved | bool
+        fail_msg: "Host configuration requires Debian 13 amd64 and an accepted k3s release."
+  roles:
+    - hardening
+    - k3s

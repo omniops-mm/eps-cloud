@@ -64,3 +64,11 @@ credentials*.json
 *.tfvars
 *.p12
 *.pfx
+
+# Infrastructure plans and local operator configuration.
+*.tfvars.json
+*.tfplan
+crash.log
+crash.*.log
+*.tfbackend
+.ansible/

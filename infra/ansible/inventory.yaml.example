@@ -1,0 +1,9 @@
+---
+eps:
+  hosts:
+    eps-box:
+      ansible_host: 127.0.0.1
+      ansible_port: 2222
+      ansible_user: YOUR_OS_LOGIN_USER
+      ansible_ssh_private_key_file: /private/path/to/operator-key
+      ansible_ssh_common_args: "-o HostKeyAlias=YOUR_VERIFIED_INSTANCE_HOST_ALIAS"

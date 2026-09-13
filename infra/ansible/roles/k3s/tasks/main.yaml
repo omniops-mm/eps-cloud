@@ -1,0 +1,104 @@
+---
+- name: Locate an existing k3s binary.
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+
+- name: Inspect an existing k3s binary.
+  ansible.builtin.command: /usr/local/bin/k3s --version
+  register: k3s_current
+  changed_when: false
+  when: k3s_binary.stat.exists
+
+- name: Refuse an implicit cluster upgrade.
+  ansible.builtin.assert:
+    that:
+      - not k3s_binary.stat.exists or eps_host_versions.k3s.version in k3s_current.stdout
+    fail_msg: "Review backup and upgrade acceptance before changing an existing cluster version."
+
+- name: Create the private installation directory.
+  ansible.builtin.file:
+    path: /root/eps-install
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Download the verified k3s binary.
+  ansible.builtin.get_url:
+    url: "{{ eps_host_versions.k3s.binary_url }}"
+    checksum: "sha256:{{ eps_host_versions.k3s.binary_sha256 }}"
+    dest: /usr/local/bin/k3s
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download the verified k3s installer.
+  ansible.builtin.get_url:
+    url: "{{ eps_host_versions.k3s.installer_url }}"
+    checksum: "sha256:{{ eps_host_versions.k3s.installer_sha256 }}"
+    dest: /root/eps-install/install-k3s.sh
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Create the k3s configuration directory.
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install the existing k3s security configuration.
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../deploy/platform/k3s-config.yaml"
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart k3s.
+
+- name: Create the initial server manifest directory.
+  ansible.builtin.file:
+    path: /var/lib/rancher/k3s/server/manifests
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Configure internal ingress before the server starts.
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../deploy/platform/traefik.yaml"
+    dest: /var/lib/rancher/k3s/server/manifests/eps-traefik.yaml
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Install the pinned server service.
+  ansible.builtin.command:
+    cmd: /bin/sh /root/eps-install/install-k3s.sh
+    creates: /etc/systemd/system/k3s.service
+  environment:
+    INSTALL_K3S_SKIP_DOWNLOAD: "true"
+    INSTALL_K3S_VERSION: "{{ eps_host_versions.k3s.version }}"
+    INSTALL_K3S_EXEC: server
+
+- name: Keep the server enabled and running.
+  ansible.builtin.systemd_service:
+    name: k3s
+    enabled: true
+    state: started
+
+- name: Apply pending server configuration changes.
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify node readiness.
+  ansible.builtin.command: /usr/local/bin/k3s kubectl wait nodes --all --for=condition=Ready --timeout=180s
+  changed_when: false
+
+- name: Verify encryption at rest.
+  ansible.builtin.command: /usr/local/bin/k3s secrets-encrypt status
+  register: k3s_encryption
+  changed_when: false
+  failed_when: "'Encryption Status: Enabled' not in k3s_encryption.stdout"

@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -82,19 +83,14 @@ def registry_auth(config):
     return auth
 
 
-def main():
+@contextmanager
+def local_cluster():
     k3d = shutil.which("k3d") or str(
         Path.home() / "Desktop/LinuxDev/EPS-reference/EPS-v0.4-work/tools/bin/k3d.exe"
     )
     kubectl = shutil.which("kubectl")
     if not kubectl or not Path(k3d).is_file():
         raise RuntimeError("Existing k3d and kubectl tools are required")
-    docker_config = (
-        Path(os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker"))) / "config.json"
-    )
-    auth = registry_auth(json.loads(docker_config.read_text(encoding="utf-8")))
-    # Only dhi.io is copied; other stored registry logins never enter the cluster.
-    registry = json.dumps({"auths": {"dhi.io": {"auth": auth}}})
     with tempfile.TemporaryDirectory(prefix="eps-local-kube-") as temporary:
         kubeconfig = Path(temporary) / "config"
         fd = os.open(kubeconfig, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -104,6 +100,18 @@ def main():
         config = json.loads(run(command + ["config", "view", "--minify", "-o", "json"]))
         validate_context(config)
         run(command + ["get", "--raw=/readyz"])
+
+        yield command
+
+
+def main():
+    docker_config = (
+        Path(os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker"))) / "config.json"
+    )
+    auth = registry_auth(json.loads(docker_config.read_text(encoding="utf-8")))
+    # Only dhi.io is copied; other stored registry logins never enter the cluster.
+    registry = json.dumps({"auths": {"dhi.io": {"auth": auth}}})
+    with local_cluster() as command:
 
         def apply(obj):
             run(

@@ -19,8 +19,17 @@ locals {
   host = jsondecode(file("${path.module}/../../deploy/platform/host-versions.json"))
 }
 
-data "google_compute_network" "default" {
-  name = "default"
+resource "google_compute_network" "eps" {
+  name                    = "eps-lab"
+  auto_create_subnetworks = false
+}
+
+resource "google_compute_subnetwork" "eps" {
+  name                     = "eps-lab-frankfurt"
+  network                  = google_compute_network.eps.id
+  ip_cidr_range            = "10.90.0.0/28"
+  region                   = "europe-west3"
+  private_ip_google_access = true
 }
 
 resource "google_service_account" "eps" {
@@ -30,12 +39,12 @@ resource "google_service_account" "eps" {
 }
 
 resource "google_compute_firewall" "iap" {
-  name          = "allow-iap-ssh"
-  network       = data.google_compute_network.default.self_link
-  priority      = 900
-  direction     = "INGRESS"
-  source_ranges = ["35.235.240.0/20"]
-  target_tags   = ["eps-iap"]
+  name                    = "eps-lab-iap-ssh"
+  network                 = google_compute_network.eps.self_link
+  priority                = 900
+  direction               = "INGRESS"
+  source_ranges           = ["35.235.240.0/20"]
+  target_service_accounts = [google_service_account.eps.email]
   allow {
     protocol = "tcp"
     ports    = ["22"]
@@ -43,8 +52,8 @@ resource "google_compute_firewall" "iap" {
 }
 
 resource "google_compute_firewall" "deny_ingress" {
-  name                    = "deny-eps-ingress"
-  network                 = data.google_compute_network.default.self_link
+  name                    = "eps-lab-deny-ingress"
+  network                 = google_compute_network.eps.self_link
   priority                = 901
   direction               = "INGRESS"
   source_ranges           = ["0.0.0.0/0"]
@@ -66,8 +75,13 @@ resource "google_compute_disk" "boot" {
   lifecycle {
     prevent_destroy = true
     precondition {
-      condition     = local.host.k3s.approved
-      error_message = "The recorded k3s security gate is closed. Do not provision an idle host."
+      condition = local.host.k3s.approved || (
+        var.lab_exception &&
+        local.host.k3s.version == local.host.k3s.lab_exception.version &&
+        local.host.k3s.binary_sha256 == local.host.k3s.lab_exception.binary_sha256 &&
+        timecmp(plantimestamp(), "${local.host.k3s.lab_exception.expires_on}T00:00:00Z") < 0
+      )
+      error_message = "The k3s gate requires a clean release or the explicit, unexpired private-lab exception."
     }
   }
 }
@@ -78,7 +92,6 @@ resource "google_compute_instance" "eps" {
   zone                = "europe-west3-a"
   deletion_protection = var.deletion_protection
   desired_status      = var.desired_status
-  tags                = ["eps-iap"]
   labels = {
     application = "eps"
   }
@@ -87,7 +100,7 @@ resource "google_compute_instance" "eps" {
     auto_delete = false
   }
   network_interface {
-    network = data.google_compute_network.default.self_link
+    subnetwork = google_compute_subnetwork.eps.id
     # Outbound downloads use an ephemeral address; ingress is restricted separately.
     access_config {}
   }
@@ -110,5 +123,46 @@ resource "google_compute_instance" "eps" {
   depends_on = [
     google_compute_firewall.iap,
     google_compute_firewall.deny_ingress,
+    google_compute_firewall.deny_private_egress,
+    google_compute_firewall.web_egress,
+    google_compute_firewall.deny_egress,
   ]
+}
+
+# Stateful return traffic for IAP SSH does not require an outbound allow rule.
+resource "google_compute_firewall" "deny_private_egress" {
+  name                    = "eps-lab-deny-private-egress"
+  network                 = google_compute_network.eps.self_link
+  direction               = "EGRESS"
+  priority                = 800
+  destination_ranges      = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+  target_service_accounts = [google_service_account.eps.email]
+  deny {
+    protocol = "all"
+  }
+}
+
+resource "google_compute_firewall" "web_egress" {
+  name                    = "eps-lab-web-egress"
+  network                 = google_compute_network.eps.self_link
+  direction               = "EGRESS"
+  priority                = 900
+  destination_ranges      = ["0.0.0.0/0"]
+  target_service_accounts = [google_service_account.eps.email]
+  allow {
+    protocol = "tcp"
+    ports    = ["80", "443"]
+  }
+}
+
+resource "google_compute_firewall" "deny_egress" {
+  name                    = "eps-lab-deny-egress"
+  network                 = google_compute_network.eps.self_link
+  direction               = "EGRESS"
+  priority                = 901
+  destination_ranges      = ["0.0.0.0/0"]
+  target_service_accounts = [google_service_account.eps.email]
+  deny {
+    protocol = "all"
+  }
 }

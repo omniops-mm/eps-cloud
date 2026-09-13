@@ -7,6 +7,14 @@
     "installer_sha256": "46177d4c99440b4c0311b67233823a8e8a2fc09693f6c89af1a7161e152fbfad",
     "approved": false,
     "reviewed": "2026-09-13",
-    "reason": "The reviewed release image contains 26 fixable HIGH or CRITICAL findings."
+    "reason": "The reviewed release image contains 26 fixable HIGH or CRITICAL findings.",
+    "lab_exception": {
+      "binary_sha256": "835873f37245fc615f547a2fe2af9402a347875f13fa64a1f136de644955ea3f",
+      "scope": "Private, attended EPS learning sessions with synthetic data only.",
+      "approved_on": "2026-09-13",
+      "record": "docs/lab-security.md",
+      "version": "v1.36.4+k3s1",
+      "expires_on": "2026-09-20"
+    }
   }
 }

@@ -12,7 +12,12 @@
           - ansible_facts.distribution == 'Debian'
           - ansible_facts.distribution_major_version == '13'
           - ansible_facts.architecture == 'x86_64'
-          - eps_host_versions.k3s.approved | bool
+          - >-
+            (eps_host_versions.k3s.approved | bool) or
+            ((eps_lab_exception | default(false) | bool) and
+             eps_host_versions.k3s.version == eps_host_versions.k3s.lab_exception.version and
+             eps_host_versions.k3s.binary_sha256 == eps_host_versions.k3s.lab_exception.binary_sha256 and
+             now(utc=true, fmt='%Y-%m-%d') < eps_host_versions.k3s.lab_exception.expires_on)
         fail_msg: "Host configuration requires Debian 13 amd64 and an accepted k3s release."
   roles:
     - hardening

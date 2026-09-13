@@ -41,3 +41,8 @@ variable "deletion_protection" {
   type        = bool
   default     = true
 }
+variable "lab_exception" {
+  description = "Explicitly select the dated, pinned private-lab exception in docs/lab-security.md."
+  type        = bool
+  default     = false
+}

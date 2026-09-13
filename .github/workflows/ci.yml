@@ -235,6 +235,13 @@ jobs:
         if: matrix.image == 'argocd'
         run: python3 scripts/install_ci_tools.py docker-scout
 
+      - name: Authenticate Docker Scout account
+        if: matrix.image == 'argocd'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_READ_TOKEN }}
+
       - name: Verify the Argo donor and patched runtime
         if: matrix.image == 'argocd'
         env:
@@ -244,6 +251,7 @@ jobs:
       - name: Remove temporary Docker donor credentials
         if: always() && matrix.image == 'argocd'
         run: |
+          docker logout
           docker logout dhi.io
           docker logout registry.scout.docker.com
 

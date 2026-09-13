@@ -1,0 +1,16 @@
+secureCookies: true
+db:
+  image: dhi.io/postgres:16.15-alpine3.24@sha256:873f9a267256074af3f047f10d9f0015f73aa959194bcea45075eb98afe9b9cb
+  imagePullSecrets:
+  - name: dhi-pull
+  bootstrapRoles: true
+  storage: 8Gi
+web:
+  replicas: 2
+hpa:
+  maxReplicas: 4
+image:
+  registry: ghcr.io/omniops-mm/eps-cloud
+  tag: 49e14222b0fac4e5d02381e531eb6d9f1943f7b5
+  webDigest: sha256:9a9714aeb8170c6d2962d7d539ca05e845ca97f1d7d478ae0cc6fb2e6a775a17
+  workerDigest: sha256:933824fd0f3808202864d20c34b2b47a793d916ffd039b75d116fb306a99b735

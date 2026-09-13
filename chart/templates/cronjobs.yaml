@@ -1,0 +1,48 @@
+{{- range .Values.jobs }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .name }}
+  {{- if $.Values.argocd }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  {{- end }}
+spec:
+  schedule: {{ .schedule | quote }}
+  timeZone: {{ $.Values.timezone }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels: {app: jobs}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: {{ .name }}
+              image: {{ $.Values.image.registry }}/worker{{ if $.Values.image.workerDigest }}@{{ $.Values.image.workerDigest }}{{ else }}:{{ $.Values.image.tag }}{{ end }}
+              command: ["python", "-m", "worker.jobs", {{ .name | quote }}]
+              envFrom:
+                - secretRef: {name: {{ $.Values.existingSecret }}}
+              env:
+                - {name: TZ, value: {{ $.Values.timezone | quote }}}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                readOnlyRootFilesystem: true
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 250m, memory: 128Mi}
+{{- end }}

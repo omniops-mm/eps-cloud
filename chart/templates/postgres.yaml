@@ -1,0 +1,119 @@
+# ponytail: one local volume on one node; use managed PostgreSQL when node failure must be tolerated.
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+spec:
+  clusterIP: None
+  selector: {app: db}
+  ports:
+    - {name: postgres, port: 5432, targetPort: postgres}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    helm.sh/resource-policy: keep
+spec:
+  serviceName: db
+  replicas: 1
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels: {app: db}
+  template:
+    metadata:
+      labels: {app: db}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.db.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      {{- if .Values.db.bootstrapRoles }}
+      initContainers:
+        - name: bootstrap
+          image: {{ .Values.db.image }}
+          command: ["/bin/sh", "/eps-init/bootstrap-db.sh"]
+          env:
+            - {name: POSTGRES_DB, value: eps}
+            - {name: POSTGRES_USER, value: {{ ternary "eps_admin" "eps" .Values.db.bootstrapRoles }}}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ ternary .Values.db.adminSecret .Values.existingSecret .Values.db.bootstrapRoles }}, key: POSTGRES_PASSWORD}
+            {{- if .Values.db.bootstrapRoles }}
+            - name: EPS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.existingSecret }}, key: POSTGRES_PASSWORD}
+            - name: EPS_EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.db.exporterSecret }}, key: password}
+            {{- end }}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          resources: {{- .Values.db.resources | toYaml | nindent 12 }}
+          volumeMounts:
+            - {name: init, mountPath: /eps-init, readOnly: true}
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: run, mountPath: /var/run/postgresql}
+            - {name: tmp, mountPath: /tmp}
+      {{- end }}
+      containers:
+        - name: postgres
+          image: {{ .Values.db.image }}
+          ports:
+            - {name: postgres, containerPort: 5432}
+          env:
+            - {name: POSTGRES_DB, value: eps}
+            - {name: POSTGRES_USER, value: {{ ternary "eps_admin" "eps" .Values.db.bootstrapRoles }}}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ ternary .Values.db.adminSecret .Values.existingSecret .Values.db.bootstrapRoles }}, key: POSTGRES_PASSWORD}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: run, mountPath: /var/run/postgresql}
+          readinessProbe:
+            exec: {command: ["pg_isready", "-U", "eps", "-d", "eps"]}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec: {command: ["pg_isready", "-U", "eps", "-d", "eps"]}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources: {{- .Values.db.resources | toYaml | nindent 12 }}
+      volumes:
+        {{- if .Values.db.bootstrapRoles }}
+        - name: init
+          configMap: {name: db-init}
+        - name: tmp
+          emptyDir: {sizeLimit: 16Mi}
+        {{- end }}
+        - name: run
+          emptyDir: {sizeLimit: 16Mi}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        annotations:
+          helm.sh/resource-policy: keep
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ .Values.db.storage }}

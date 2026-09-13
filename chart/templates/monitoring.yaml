@@ -1,0 +1,148 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: eps-web
+  labels: {release: monitoring}
+spec:
+  scrapeProtocols: [OpenMetricsText1.0.0, PrometheusText0.0.4]
+  selector:
+    matchLabels: {app: web}
+  namespaceSelector:
+    matchNames: [{{ .Release.Namespace }}]
+  endpoints:
+    - port: http
+      honorLabels: false
+      followRedirects: false
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: eps
+  labels: {release: monitoring}
+spec:
+  groups:
+    - name: eps
+      rules:
+        - alert: EPSWebDown
+          expr: (sum(up{namespace={{ .Release.Namespace | quote }},service="web"}) or vector(0)) == 0
+          for: 2m
+          labels: {severity: critical, namespace: {{ .Release.Namespace | quote }}}
+          annotations:
+            summary: EPS has no healthy metrics target.
+        - alert: EPSHigh5xx
+          expr: sum(rate(eps_http_requests_total{namespace={{ .Release.Namespace | quote }},status=~"5.."}[5m])) / clamp_min(sum(rate(eps_http_requests_total{namespace={{ .Release.Namespace | quote }}}[5m])), 0.01) > 0.05
+          for: 5m
+          labels: {severity: warning, namespace: {{ .Release.Namespace | quote }}}
+          annotations:
+            summary: More than five percent of EPS requests are failing.
+        - alert: EPSJobStale
+          expr: time() - (kube_cronjob_status_last_successful_time{namespace={{ .Release.Namespace | quote }}} or on(namespace,cronjob) kube_cronjob_created{namespace={{ .Release.Namespace | quote }}}) > 90000
+          for: 5m
+          labels: {severity: warning, namespace: {{ .Release.Namespace | quote }}}
+          annotations:
+            summary: An EPS CronJob has no successful run within 25 hours.
+        {{- range .Values.jobs }}
+        - alert: EPSJobMissing
+          expr: absent(kube_cronjob_info{namespace={{ $.Release.Namespace | quote }},cronjob={{ .name | quote }}})
+          for: 5m
+          labels: {severity: warning, namespace: {{ $.Release.Namespace | quote }}, cronjob: {{ .name | quote }}}
+          annotations:
+            summary: An expected EPS CronJob is missing from collected metrics.
+        {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eps-dashboards
+  labels: {grafana_dashboard: "1"}
+data:
+{{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
+  {{ base $path }}: |
+{{ $.Files.Get $path | replace "__EPS_NAMESPACE__" $.Release.Namespace | indent 4 }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alert-log
+spec:
+  type: ClusterIP
+  selector: {app: alert-log}
+  ports:
+    - {name: http, port: 9091, targetPort: 9091}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-log
+  {{- if .Values.argocd }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  {{- end }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: alert-log}
+  template:
+    metadata:
+      labels: {app: alert-log}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: receiver
+          image: {{ .Values.image.registry }}/web{{ if .Values.image.webDigest }}@{{ .Values.image.webDigest }}{{ else }}:{{ .Values.image.tag }}{{ end }}
+          command: ["python", "alert-log.py"]
+          ports:
+            - {name: http, containerPort: 9091}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+          resources:
+            requests: {cpu: 10m, memory: 24Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alerts-to-log
+spec:
+  podSelector:
+    matchLabels: {app: alert-log}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: monitoring}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: alertmanager}
+      ports:
+        - {protocol: TCP, port: 9091}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-from-prometheus
+spec:
+  podSelector:
+    matchLabels: {app: web}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: monitoring}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: prometheus}
+      ports:
+        - {protocol: TCP, port: 8000}
+{{- end }}

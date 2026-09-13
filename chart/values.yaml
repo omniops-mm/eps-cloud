@@ -1,0 +1,73 @@
+# Deployment-specific settings; resource definitions are in templates/.
+
+image:
+  # Release snapshots set these; local examples may still use the commit tag.
+  webDigest: ""
+  workerDigest: ""
+  registry: ghcr.io/omniops-mm/eps-cloud
+  # Full commit sha, the tag CI publishes. Never latest.
+  tag: 9230464b35605b1c1e695787d7a671493522372b
+
+# An externally managed Secret supplies application credentials.
+existingSecret: eps
+
+timezone: Europe/Berlin
+
+web:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+db:
+  image: postgres:16-alpine
+  imagePullSecrets: []
+  bootstrapRoles: false
+  adminSecret: eps-db-admin
+  exporterSecret: eps-exporter
+  storage: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+jobs:
+  - name: refresh-weather
+    schedule: "0 6 * * *"
+  - name: cleanup-audit-log
+    schedule: "0 3 * * *"
+
+ingress:
+  host: eps.localtest.me
+  tls: true
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUPercent: 70
+  # Requires the reviewed Prometheus Adapter; zero retains the native CPU HPA.
+  requestsPerSecond: 0
+  scaleDownSeconds: 300
+
+# Enable secure cookies for HTTPS deployments.
+secureCookies: false
+argocd: false
+migration:
+  mode: init
+
+# Requires an installed monitoring platform with matching CRDs and selectors.
+monitoring:
+  enabled: false
+
+# Enable only after the private Tempo backend passes its live checks.
+tracing:
+  enabled: false
+  sampleRate: 0.1

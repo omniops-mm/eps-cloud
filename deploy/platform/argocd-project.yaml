@@ -21,3 +21,5 @@ spec:
     - {group: autoscaling, kind: HorizontalPodAutoscaler}
     - {group: networking.k8s.io, kind: Ingress}
     - {group: networking.k8s.io, kind: NetworkPolicy}
+    - {group: monitoring.coreos.com, kind: ServiceMonitor}
+    - {group: monitoring.coreos.com, kind: PrometheusRule}

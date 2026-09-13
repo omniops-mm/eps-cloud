@@ -4,12 +4,12 @@ on:
   push:
   pull_request:
 
-# a newer push to the same branch makes the run in progress pointless
+# Cancel superseded runs on the same branch.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# read-only by default; the jobs that need more ask for it themselves
+# Grant additional permissions only at job scope.
 permissions:
   contents: read
 
@@ -41,8 +41,7 @@ jobs:
       - run: uv run pytest -q
 
   migrations:
-    # the test suite runs on SQLite, so nothing else proves the migrations work
-    # on the database this actually ships with
+    # Validate migrations against PostgreSQL in addition to SQLite unit tests.
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -76,7 +75,7 @@ jobs:
       - name: Models and migrations agree
         run: uv run alembic check
       - name: Every migration can be undone
-        # a downgrade nobody runs is a downgrade that does not work
+        # Verify the reverse migration path against PostgreSQL.
         run: uv run alembic downgrade base
       - name: Seed a fresh database
         run: |
@@ -120,6 +119,12 @@ jobs:
           deploy/raw-manifests
       - name: Validate chart variants and security controls
         run: uv run python scripts/check_deploy.py
+      - name: Validate opt-in monitoring and security regressions
+        run: |
+          uv run python -m scripts.check_monitoring --rules-output "$RUNNER_TEMP/eps-monitoring"
+          uv run pytest -q tests/test_monitoring.py
+          docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges -v "$RUNNER_TEMP/eps-monitoring:/rules:ro" --entrypoint promtool prom/prometheus:v3.13.2 check rules /rules/alerts.yaml /rules/dashboards.yaml
+          docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges -v "$RUNNER_TEMP/eps-monitoring:/rules:ro" -v "$PWD/tests:/tests:ro" --entrypoint promtool prom/prometheus:v3.13.2 test rules /tests/monitoring-rules.yml
       - name: Validate pinned platform charts and custom resources
         run: uv run python scripts/check_platform.py
 

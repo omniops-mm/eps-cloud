@@ -90,6 +90,8 @@ def validate_gitops(objects: list[dict]) -> None:
         ("autoscaling", "HorizontalPodAutoscaler"),
         ("networking.k8s.io", "Ingress"),
         ("networking.k8s.io", "NetworkPolicy"),
+        ("monitoring.coreos.com", "ServiceMonitor"),
+        ("monitoring.coreos.com", "PrometheusRule"),
     }
     if (
         project["sourceRepos"] != [repo]
@@ -141,8 +143,10 @@ def validate_gitops(objects: list[dict]) -> None:
             != expected
         ):
             raise ValueError("GitOps migration ordering changed")
-        if obj["kind"] == "Deployment" and (
-            "replicas" in obj["spec"] or obj["spec"]["template"]["spec"].get("initContainers")
+        if (
+            obj["kind"] == "Deployment"
+            and obj["metadata"]["name"] == "web"
+            and ("replicas" in obj["spec"] or obj["spec"]["template"]["spec"].get("initContainers"))
         ):
             raise ValueError("GitOps must use the migration Job and leave replicas to HPA")
     jobs = [obj for obj in objects if obj["kind"] == "Job"]

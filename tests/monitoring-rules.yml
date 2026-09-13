@@ -1,0 +1,91 @@
+rule_files:
+- /rules/alerts.yaml
+evaluation_interval: 1m
+tests:
+- name: web outage fires and resolves
+  interval: 1m
+  input_series:
+  - series: up{namespace="eps",service="web"}
+    values: 0 0 0 0 1 1
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: EPSWebDown
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        namespace: eps
+      exp_annotations:
+        summary: EPS has no healthy metrics target.
+  - eval_time: 5m
+    alertname: EPSWebDown
+    exp_alerts: []
+- name: missing target fires
+  interval: 1m
+  input_series: []
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: EPSWebDown
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        namespace: eps
+      exp_annotations:
+        summary: EPS has no healthy metrics target.
+- name: server error ratio fires
+  interval: 1m
+  input_series:
+  - series: eps_http_requests_total{namespace="eps",status="200"}
+    values: 0+90x10
+  - series: eps_http_requests_total{namespace="eps",status="500"}
+    values: 0+10x10
+  alert_rule_test:
+  - eval_time: 7m
+    alertname: EPSHigh5xx
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        namespace: eps
+      exp_annotations:
+        summary: More than five percent of EPS requests are failing.
+- name: successful and never-successful jobs become stale
+  interval: 1m
+  input_series:
+  - series: kube_cronjob_status_last_successful_time{namespace="eps",cronjob="refresh-weather"}
+    values: 0+0x1560
+  - series: kube_cronjob_created{namespace="eps",cronjob="cleanup-audit-log"}
+    values: 0+0x1560
+  alert_rule_test:
+  - eval_time: 26h
+    alertname: EPSJobStale
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        namespace: eps
+        cronjob: refresh-weather
+      exp_annotations:
+        summary: An EPS CronJob has no successful run within 25 hours.
+    - exp_labels:
+        severity: warning
+        namespace: eps
+        cronjob: cleanup-audit-log
+      exp_annotations:
+        summary: An EPS CronJob has no successful run within 25 hours.
+- name: missing expected jobs fire
+  interval: 1m
+  input_series: []
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: EPSJobMissing
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        namespace: eps
+        cronjob: refresh-weather
+      exp_annotations:
+        summary: An expected EPS CronJob is missing from collected metrics.
+    - exp_labels:
+        severity: warning
+        namespace: eps
+        cronjob: cleanup-audit-log
+      exp_annotations:
+        summary: An expected EPS CronJob is missing from collected metrics.

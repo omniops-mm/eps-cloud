@@ -1,5 +1,4 @@
-# Only what genuinely varies between installs. Everything else is fixed in the
-# templates, same as the raw manifests.
+# Deployment-specific settings; resource definitions are in templates/.
 
 image:
   # Release snapshots set these; local examples may still use the commit tag.
@@ -9,8 +8,7 @@ image:
   # Full commit sha, the tag CI publishes. Never latest.
   tag: 9230464b35605b1c1e695787d7a671493522372b
 
-# The Secret is created imperatively before install; the chart references it
-# and never creates it. See raw-manifests/10-secret.yaml.example.
+# An externally managed Secret supplies application credentials.
 existingSecret: eps
 
 timezone: Europe/Berlin
@@ -56,8 +54,12 @@ hpa:
   maxReplicas: 6
   targetCPUPercent: 70
 
-# Local HTTP remains supported; production enables secure cookies later.
+# Enable secure cookies for HTTPS deployments.
 secureCookies: false
 argocd: false
 migration:
   mode: init
+
+# Requires an installed monitoring platform with matching CRDs and selectors.
+monitoring:
+  enabled: false

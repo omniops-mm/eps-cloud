@@ -69,7 +69,7 @@ With `db.bootstrapRoles: true`, a PostgreSQL init container now initializes fres
 
 The bootstrap checks PostgreSQL major 16 and refuses any existing database without its completion marker. A failure does not delete data or retry role creation against a partial database. Never add the marker manually to bypass a failed initialization. Investigate or restore from backup; only disposable rehearsal volumes may be explicitly recreated. This change is not an in-place migration procedure for older EPS volumes. Secret changes do not rotate existing PostgreSQL role passwords automatically.
 
-Before production: use fresh isolated rehearsal storage, verify version/roles/database access and restart behavior with the exact images, and confirm image pulls work after a pod restart. Local shell tests use simulated PostgreSQL commands and prove control flow only. No real database initialization has been executed by the assistant.
+Before production: use fresh isolated rehearsal storage, verify version/roles/database access and restart behavior with the exact images, and confirm image pulls work after a pod restart. Local shell tests use simulated PostgreSQL commands and prove control flow only. The Kubernetes database rehearsal below verifies initialization and restart behavior against the pinned image.
 
 ## Local Kubernetes registry rehearsal
 
@@ -89,4 +89,12 @@ The rehearsal waits for real init-container/PVC readiness, verifies database rol
 
 After the registry and Kubernetes database rehearsals pass, run Python module scripts.rehearse_secret_controllers from the repository. It verifies both chart archive hashes before mutations, uses only the validated local test context, installs digest-pinned cert-manager and both scoped ESO releases, and checks readiness plus allowed/denied Secret and named-token permissions using SubjectAccessReview. It applies the existing link-local egress policy to the controller and monitoring namespaces. These authorization checks do not prove network enforcement.
 
-Controllers and their namespaces remain installed for the next step. A failed run leaves resources available for diagnosis; it never deletes CRDs or rolls back shared resources automatically. No Google trust, SecretStore, ExternalSecret or cloud resource is created. The registry credential must already exist. Certificate renewal and actual Google token exchange remain later live gates.
+Controllers and their namespaces remain installed for the next step. A failed run leaves resources available for diagnosis; it never deletes CRDs or rolls back shared resources automatically. No Google trust, SecretStore, ExternalSecret or cloud resource is created. The registry credential must already exist. Certificate renewal and actual Google token exchange require separate integration checks.
+
+## Application monitoring
+
+The app chart defaults to `monitoring.enabled=false` in both development and production. Enable it only after installing a reviewed Prometheus Operator platform with matching CRDs, Prometheus and Alertmanager pods in the `monitoring` namespace, and Grafana with datasource UID `prometheus`. The label `release: monitoring` identifies the app ServiceMonitor and PrometheusRule. Platform installation, dashboard discovery permissions and PostgreSQL exporter configuration are separate prerequisites; the app chart does not install them.
+
+Enabling monitoring creates a web ServiceMonitor, availability/error/CronJob alerts, three dashboard definitions, and the internal alert receiver. Configure Alertmanager to send resolved and firing notifications to `http://alert-log.eps.svc.cluster.local:9091/`, with `max_alerts: 100`. NetworkPolicies require both the monitoring namespace and the Prometheus or Alertmanager pod label. The web policy permits TCP port 8000, including all HTTP paths on that port; Kubernetes NetworkPolicy does not filter URL paths. The receiver uses the same image digest as web and mounts no credentials.
+
+Run `python -m scripts.check_monitoring --rules-output <directory>` for strict custom-resource schemas, rendered pod/network/image checks, namespace substitution and ordinary Kubernetes schemas. The upstream Prometheus Operator v0.93.1 schema downloads are checksum-verified using `monitoring-schemas.json`; this pins validation data, not approval of a controller image. CI also uses promtool to parse the rendered alert and dashboard expressions. These checks do not prove scrape connectivity, populated panels or alert delivery. Monitor permissions must be reviewed again when selecting the platform chart.

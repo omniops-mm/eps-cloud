@@ -17,7 +17,7 @@ The common file alone starts no ESO controller or webhook. Apply `eso-webhook-is
 
 ## Google authentication
 
-Use the supported `auth.workloadIdentityFederation.serviceAccountRef` mechanism in both documents of `secret-store.yaml.example`. Replace placeholders in a private copy outside Git. No JSON key, credential file, GCP service-account impersonation or VM metadata credentials are configured.
+Use the supported `auth.workloadIdentityFederation.serviceAccountRef` mechanism in both documents of `secret-store.yaml.example`. Replace placeholders in a private copy outside Git. Set both the STS audience and the ServiceAccount token audience to the same provider: the former uses //iam.googleapis.com/... and the latter uses https://iam.googleapis.com/.... Explicit token audiences prevent the Kubernetes API audience from being used for Google authentication. No JSON key, credential file, GCP service-account impersonation or VM metadata credentials are configured.
 
 Cloud setup is a separate operator task:
 

@@ -40,6 +40,18 @@ def test_federation_boundaries():
     with pytest.raises(ValueError, match="explicitly use"):
         validate_federation(identities, changed_stores)
 
+    for audiences in (None, ["k3s"], ["https://wrong-provider.example"]):
+        changed_stores = deepcopy(stores)
+        account = changed_stores[0]["spec"]["provider"]["gcpsm"]["auth"][
+            "workloadIdentityFederation"
+        ]["serviceAccountRef"]
+        if audiences is None:
+            del account["audiences"]
+        else:
+            account["audiences"] = audiences
+        with pytest.raises(ValueError, match="explicitly use"):
+            validate_federation(identities, changed_stores)
+
 
 def test_cluster_wide_eso_role_rejected():
     from scripts.check_platform import validate_eso_scope

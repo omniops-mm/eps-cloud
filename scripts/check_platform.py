@@ -100,7 +100,11 @@ def validate_federation(identities: list[dict], stores: list[dict]) -> None:
         if (
             set(auth) != {"workloadIdentityFederation"}
             or set(federation) != {"audience", "serviceAccountRef"}
-            or federation["serviceAccountRef"] != {"name": "eps-secrets"}
+            or federation["serviceAccountRef"]
+            != {
+                "name": "eps-secrets",
+                "audiences": ["https:" + federation["audience"]],
+            }
             or not federation["audience"].startswith("//iam.googleapis.com/projects/")
             or not provider.get("projectID")
         ):

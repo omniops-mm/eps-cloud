@@ -1,0 +1,75 @@
+# BLOCKED: unresolved Argo image findings. Do not install.
+createClusterRoles: false
+global:
+  image:
+    repository: dhi.io/argocd
+    tag: 3.5.2@sha256:63b043cfc1184ece55d445e03a750fe8e780ea16ae411c2ee1dee2b6fe0f7a77
+  imagePullSecrets:
+  - name: dhi-pull
+configs:
+  cm:
+    application.resourceTrackingMethod: annotation
+    users.anonymous.enabled: 'false'
+  rbac:
+    policy.default: ''
+  params:
+    server.insecure: false
+  clusterCredentials:
+    eps:
+      name: in-cluster-eps
+      server: https://kubernetes.default.svc
+      namespaces: eps
+      clusterResources: false
+      config: {}
+controller:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+repoServer:
+  automountServiceAccountToken: false
+  serviceAccount:
+    automountServiceAccountToken: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+server:
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: false
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 192Mi
+redis:
+  image:
+    repository: dhi.io/redis
+    tag: 8.6.6@sha256:5e18c5b4d11d55c8788a1bf360cb34fc6a40f9db215812c7ee84e82a778c71f6
+  automountServiceAccountToken: false
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+redisSecretInit:
+  enabled: false
+dex:
+  enabled: false
+notifications:
+  enabled: false
+applicationSet:
+  enabled: false

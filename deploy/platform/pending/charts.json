@@ -1,0 +1,9 @@
+{
+  "argo-cd": {
+    "repository": "https://argoproj.github.io/argo-helm",
+    "version": "10.9.0",
+    "appVersion": "v3.5.2",
+    "digest": "3d457160c878eb0036b7677176091ff958036f6afd08d359c063f285984e9fec",
+    "status": "blocked"
+  }
+}

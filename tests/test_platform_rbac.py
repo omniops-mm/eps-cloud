@@ -131,3 +131,53 @@ def test_monitoring_platform_rejects_public_access_and_secret_rbac():
     ):
         with pytest.raises(ValueError):
             validate_monitoring_platform([obj], "kube-prometheus-stack")
+
+
+def test_telemetry_rejects_expanded_access_and_receivers():
+    from copy import deepcopy
+
+    import yaml
+
+    from scripts.check_platform import PLATFORM, validate_telemetry, validate_telemetry_network
+
+    policies = list(yaml.safe_load_all((PLATFORM / "telemetry-network.yaml").read_text()))
+    validate_telemetry_network(policies)
+    for change in ("namespace", "port", "pod", "duplicate"):
+        changed = deepcopy(policies)
+        rule = changed[2]["spec"]["ingress"][0]
+        if change == "namespace":
+            rule["from"][0]["namespaceSelector"] = {}
+        elif change == "port":
+            rule["ports"][0]["port"] = 4317
+        elif change == "pod":
+            rule["from"][0]["podSelector"] = {}
+        else:
+            changed[2] = deepcopy(changed[1])
+        with pytest.raises(ValueError):
+            validate_telemetry_network(changed)
+    for obj in (
+        {"kind": "ClusterRole", "metadata": {"name": "alloy"}, "rules": []},
+        {
+            "kind": "Role",
+            "metadata": {"name": "alloy", "namespace": "eps"},
+            "rules": [{"apiGroups": [""], "resources": ["secrets"], "verbs": ["get"]}],
+        },
+        {"kind": "RoleBinding", "metadata": {"name": "alloy", "namespace": "monitoring"}},
+    ):
+        with pytest.raises(ValueError):
+            validate_telemetry([obj], "alloy")
+    config: dict = {
+        "distributor": {
+            "receivers": {"otlp": {"protocols": {"http": {"endpoint": "0.0.0.0:4318"}}}}
+        }
+    }
+    config_object: dict = {
+        "kind": "ConfigMap",
+        "metadata": {"name": "tempo"},
+        "data": {"tempo.yaml": yaml.safe_dump(config)},
+    }
+    validate_telemetry([config_object], "tempo")
+    config["distributor"]["receivers"]["jaeger"] = {}
+    config_object["data"]["tempo.yaml"] = yaml.safe_dump(config)
+    with pytest.raises(ValueError, match="OTLP HTTP"):
+        validate_telemetry([config_object], "tempo")

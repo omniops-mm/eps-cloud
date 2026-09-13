@@ -232,7 +232,7 @@ def validate_monitoring_platform(objects: list[dict], chart: str) -> None:
                 or spec.get("overrideHonorLabels") is not True
             ):
                 raise ValueError("Prometheus scrape credentials or label boundary changed")
-        if kind != "Deployment":
+        if kind not in {"Deployment", "StatefulSet"}:
             continue
         pod = obj["spec"]["template"]["spec"]
         if any(pod.get(key) for key in ("hostNetwork", "hostPID", "hostIPC")) or any(
@@ -241,8 +241,23 @@ def validate_monitoring_platform(objects: list[dict], chart: str) -> None:
             raise ValueError("Monitoring pods must not access the host")
         if pod.get("securityContext", {}).get("runAsNonRoot") is not True:
             raise ValueError("Monitoring pods must run as non-root")
-        if pod.get("imagePullSecrets") != [{"name": "dhi-pull"}]:
+        account = next(
+            (
+                o
+                for o in objects
+                if o["kind"] == "ServiceAccount"
+                and o["metadata"]["name"] == pod.get("serviceAccountName")
+            ),
+            {},
+        )
+        if pod.get("imagePullSecrets", account.get("imagePullSecrets")) != [{"name": "dhi-pull"}]:
             raise ValueError("Monitoring pod registry access is missing")
+        if (
+            chart in {"loki", "tempo"}
+            and pod.get("automountServiceAccountToken", account.get("automountServiceAccountToken"))
+            is not False
+        ):
+            raise ValueError("Telemetry storage must not mount Kubernetes API tokens")
         for container in (pod.get("initContainers") or []) + pod["containers"]:
             security = container.get("securityContext", {})
             if not container["image"].startswith("dhi.io/") or "@sha256:" not in container["image"]:
@@ -270,12 +285,94 @@ def validate_monitoring_platform(objects: list[dict], chart: str) -> None:
             )
 
 
+def validate_telemetry(objects: list[dict], chart: str) -> None:
+    """Constrain the collector's API access and the storage receivers."""
+    validate_monitoring_platform(objects, chart)
+    for obj in objects:
+        kind = obj["kind"]
+        if kind in {"Pod", "Job", "CronJob", "Secret"}:
+            raise ValueError("Unexpected telemetry workload or credential")
+        if kind in {"ClusterRole", "ClusterRoleBinding"}:
+            raise ValueError("Telemetry must not receive cluster-wide RBAC")
+        if kind in {"Role", "RoleBinding"}:
+            if chart != "alloy" or obj["metadata"].get("namespace") != "eps":
+                raise ValueError("Only Alloy may receive telemetry RBAC, in eps")
+            if kind == "Role" and obj["rules"] != [
+                {"apiGroups": [""], "resources": ["pods"], "verbs": ["get", "list", "watch"]},
+                {"apiGroups": [""], "resources": ["pods/log"], "verbs": ["get"]},
+            ]:
+                raise ValueError("Alloy permissions must be limited to reading EPS pod logs")
+            if kind == "RoleBinding" and (
+                obj["subjects"]
+                != [{"kind": "ServiceAccount", "name": "alloy", "namespace": "monitoring"}]
+                or obj["roleRef"]
+                != {"apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": "alloy"}
+            ):
+                raise ValueError("Alloy binding must target only its monitoring identity")
+        if kind == "StatefulSet" and any(
+            v == "Delete"
+            for v in obj["spec"].get("persistentVolumeClaimRetentionPolicy", {}).values()
+        ):
+            raise ValueError("Telemetry PVCs must survive workload removal")
+        if kind == "ConfigMap" and chart == "tempo" and "tempo.yaml" in obj.get("data", {}):
+            config = yaml.safe_load(obj["data"]["tempo.yaml"])
+            receivers = config["distributor"]["receivers"]
+            if receivers != {"otlp": {"protocols": {"http": {"endpoint": "0.0.0.0:4318"}}}}:
+                raise ValueError("Tempo must enable only the OTLP HTTP receiver")
+
+
+def validate_telemetry_network(objects: list[dict]) -> None:
+    """Check the exact namespace, client selectors and ports for private storage."""
+    expected_clients = {
+        "alloy": [],
+        "loki": [("monitoring", "alloy", 3100), ("monitoring", "grafana", 3100)],
+        "tempo": [("eps", "web", 4318), ("monitoring", "grafana", 3200)],
+    }
+    if len(objects) != 3:
+        raise ValueError("Expected three telemetry ingress policies")
+    for obj in objects:
+        name = obj["metadata"]["name"].removesuffix("-ingress")
+        spec = obj["spec"]
+        if (
+            name not in expected_clients
+            or obj["metadata"].get("namespace") != "monitoring"
+            or spec["podSelector"] != {"matchLabels": {"app.kubernetes.io/name": name}}
+            or spec["policyTypes"] != ["Ingress"]
+        ):
+            raise ValueError("Telemetry policy target changed")
+        clients = []
+        for rule in spec["ingress"]:
+            for peer in rule["from"]:
+                for port in rule["ports"]:
+                    namespace = peer.get(
+                        "namespaceSelector",
+                        {"matchLabels": {"kubernetes.io/metadata.name": "monitoring"}},
+                    )
+                    ns = namespace.get("matchLabels", {}).get("kubernetes.io/metadata.name")
+                    label = "app" if ns == "eps" else "app.kubernetes.io/name"
+                    pod = peer.get("podSelector", {})
+                    value = pod.get("matchLabels", {}).get(label)
+                    if (
+                        namespace != {"matchLabels": {"kubernetes.io/metadata.name": ns}}
+                        or pod != {"matchLabels": {label: value}}
+                        or set(peer) - {"namespaceSelector", "podSelector"}
+                        or port != {"protocol": "TCP", "port": port.get("port")}
+                    ):
+                        raise ValueError("Telemetry client selector changed")
+                    clients.append((ns, value, port["port"]))
+        if sorted(clients) != sorted(expected_clients.pop(name)):
+            raise ValueError("Telemetry ingress must allow only the intended clients and ports")
+
+
 def main() -> None:
     pins = json.loads((PLATFORM / "versions.json").read_text(encoding="utf-8"))
     identities = list(yaml.safe_load_all((PLATFORM / "eso-identities.yaml").read_text()))
     stores = list(yaml.safe_load_all((PLATFORM / "secret-store.yaml.example").read_text()))
     validate_federation(identities, stores)
     validate_monitoring_access()
+    validate_telemetry_network(
+        list(yaml.safe_load_all((PLATFORM / "telemetry-network.yaml").read_text()))
+    )
     schemas = {}
     core = []
     custom: list[dict] = []
@@ -327,6 +424,8 @@ def main() -> None:
                     validate_eso_scope(objects, namespace)
                 if name in {"kube-prometheus-stack", "prometheus-postgres-exporter"}:
                     validate_monitoring_platform(objects, name)
+                if name in {"alloy", "loki", "tempo"}:
+                    validate_telemetry(objects, name)
                 for obj in objects:
                     if name == "external-secrets":
                         validate_eso_role_extensions(obj)
@@ -345,6 +444,7 @@ def main() -> None:
             "eso-identities.yaml",
             "grafana-dashboard-rbac.yaml",
             "exporter-networkpolicies.yaml",
+            "telemetry-network.yaml",
         ):
             core.extend(o for o in yaml.safe_load_all((PLATFORM / filename).read_text()) if o)
         for filename in (

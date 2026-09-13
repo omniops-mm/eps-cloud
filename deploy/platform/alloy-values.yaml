@@ -1,0 +1,118 @@
+fullnameOverride: alloy
+image:
+  registry: dhi.io
+  repository: alloy
+  digest: sha256:37db4143bd5ece6096905b33205003803e600734579d7d2c1317e065287f1a22
+  pullSecrets:
+  - name: dhi-pull
+global:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 473
+    runAsGroup: 473
+    fsGroup: 473
+    seccompProfile:
+      type: RuntimeDefault
+crds:
+  create: false
+controller:
+  type: deployment
+  replicas: 1
+  volumes:
+    extra:
+    - name: data
+      emptyDir:
+        sizeLimit: 64Mi
+configReloader:
+  enabled: false
+service:
+  enabled: false
+rbac:
+  create: true
+  namespaces:
+  - eps
+  rules:
+  - apiGroups:
+    - ''
+    resources:
+    - pods
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ''
+    resources:
+    - pods/log
+    verbs:
+    - get
+  clusterRules: []
+alloy:
+  enableReporting: false
+  storagePath: /var/lib/alloy
+  mounts:
+    varlog: false
+    dockercontainers: false
+    extra:
+    - name: data
+      mountPath: /var/lib/alloy
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+      - ALL
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 192Mi
+  configMap:
+    content: |
+      discovery.kubernetes "pods" {
+        role = "pod"
+        namespaces { names = ["eps"] }
+        selectors {
+          role = "pod"
+          label = "app in (web,jobs)"
+        }
+      }
+      discovery.relabel "logs" {
+        targets = discovery.kubernetes.pods.targets
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          regex = "web|refresh-weather|cleanup-audit-log"
+          action = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app"]
+          target_label = "app"
+        }
+      }
+      loki.source.kubernetes "pods" {
+        targets = discovery.relabel.logs.output
+        forward_to = [loki.process.logs.receiver]
+      }
+      loki.process "logs" {
+        stage.label_keep { values = ["namespace", "pod", "container", "app"] }
+        forward_to = [loki.write.local.receiver]
+      }
+      loki.write "local" {
+        endpoint {
+          url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }

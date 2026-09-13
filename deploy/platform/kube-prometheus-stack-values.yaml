@@ -204,6 +204,31 @@ alertmanager:
   ingress:
     enabled: false
 grafana:
+  additionalDataSources:
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki.monitoring.svc.cluster.local:3100
+    jsonData:
+      maxLines: 500
+      derivedFields:
+      - name: TraceID
+        matcherRegex: '"trace_id"\s*:\s*"([0-9a-f]{32})"'
+        datasourceUid: tempo
+        url: '$${__value.raw}'
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    access: proxy
+    url: http://tempo.monitoring.svc.cluster.local:3200
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: -1m
+        spanEndTimeShift: 1m
+        customQuery: true
+        query: '{namespace="eps"} | json | trace_id="$${__span.traceId}"'
   fullnameOverride: grafana
   admin:
     existingSecret: eps-grafana

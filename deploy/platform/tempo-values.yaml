@@ -1,0 +1,80 @@
+fullnameOverride: tempo
+tempo:
+  registry: dhi.io
+  repository: tempo
+  tag: 2.10.8@sha256:023d379c0b07ffc15192d7844203e2949996b4c623f65111f2776a0a6e94d84b
+  pullSecrets:
+  - dhi-pull
+  reportingEnabled: false
+  memBallastSizeMbs: 0
+  retention: 24h
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+      - ALL
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  queryFrontend:
+    search:
+      concurrent_jobs: 4
+  querier:
+    max_concurrent_queries: 4
+  receivers:
+    jaeger:
+      protocols:
+        grpc: null
+        thrift_binary: null
+        thrift_compact: null
+        thrift_http: null
+    opencensus: null
+    otlp:
+      protocols:
+        grpc: null
+        http:
+          endpoint: 0.0.0.0:4318
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+serviceAccount:
+  automountServiceAccountToken: false
+  imagePullSecrets:
+  - name: dhi-pull
+persistence:
+  enabled: true
+  size: 2Gi
+tempoQuery:
+  enabled: false
+# The chart port helpers require the disabled Jaeger map above. Keep the
+# runtime receiver list explicit so an empty receiver cannot enable defaults.
+config: |
+  multitenancy_enabled: false
+  usage_report:
+    reporting_enabled: false
+  compactor:
+    compaction:
+      block_retention: {{ .Values.tempo.retention }}
+  distributor:
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+  server:
+    http_listen_port: 3200
+  storage:
+    {{- toYaml .Values.tempo.storage | nindent 4 }}
+  querier:
+    {{- toYaml .Values.tempo.querier | nindent 4 }}
+  query_frontend:
+    {{- toYaml .Values.tempo.queryFrontend | nindent 4 }}

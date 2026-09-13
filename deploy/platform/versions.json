@@ -26,5 +26,29 @@
     "sha256": "132474e152abb076ef85157b95c5dc3d16e29de26605a9d513789a29409a6e79",
     "release": "postgres-exporter",
     "namespace": "eps"
+  },
+  "alloy": {
+    "repository": "https://grafana.github.io/helm-charts",
+    "version": "1.12.1",
+    "appVersion": "v1.19.2",
+    "sha256": "cdd1ec39f99c3c506d5b521156d72236ea143c089f50da6b64398f831734829c",
+    "release": "alloy",
+    "namespace": "monitoring"
+  },
+  "loki": {
+    "repository": "https://grafana.github.io/helm-charts",
+    "version": "7.3.0",
+    "appVersion": "3.6.12",
+    "sha256": "04a339f712d770a1f599f05fc0a5a3cde18e43914e49ae6a49f7171be86bcc09",
+    "release": "loki",
+    "namespace": "monitoring"
+  },
+  "tempo": {
+    "repository": "https://grafana-community.github.io/helm-charts",
+    "version": "2.4.0",
+    "appVersion": "2.10.8",
+    "sha256": "fad57f9ddd7d65f46158ee3455d32b7de6b3c1e4a3ce35757d2a8c5b2eb4481b",
+    "release": "tempo",
+    "namespace": "monitoring"
   }
 }

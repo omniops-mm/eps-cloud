@@ -1,0 +1,85 @@
+deploymentMode: SingleBinary
+loki:
+  image:
+    registry: dhi.io
+    repository: loki
+    tag: 3.7.7
+    digest: sha256:cd47ee1a4efb620d1c5d6d9be05dc5a19400ddecdb52ebef50cc45462dd4283c
+  auth_enabled: false
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+      - ALL
+  commonConfig:
+    replication_factor: 1
+  schemaConfig:
+    configs:
+    - from: '2026-01-01'
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+  storage:
+    type: filesystem
+  limits_config:
+    retention_period: 48h
+    ingestion_rate_mb: 2
+    ingestion_burst_size_mb: 4
+    max_query_parallelism: 2
+  compactor:
+    retention_enabled: true
+    delete_request_store: filesystem
+  analytics:
+    reporting_enabled: false
+serviceAccount:
+  automountServiceAccountToken: false
+  imagePullSecrets:
+  - name: dhi-pull
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 4Gi
+    enableStatefulSetAutoDeletePVC: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+gateway:
+  enabled: false
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
+ruler:
+  enabled: false
+sidecar:
+  rules:
+    enabled: false
+
+rbac:
+  namespaced: true

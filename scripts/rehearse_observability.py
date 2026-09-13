@@ -29,6 +29,11 @@ def rehearsal_objects(raw):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("records", type=Path)
+    parser.add_argument(
+        "--request-scaling",
+        action="store_true",
+        help="Enable bounded local request-rate scaling after adapter installation",
+    )
     args = parser.parse_args()
     records = {}
     for path in args.records.glob("*.json"):
@@ -77,6 +82,15 @@ def main():
         "monitoring": {"enabled": True},
         "tracing": {"enabled": True, "sampleRate": 1.0},
     }
+    if args.request_scaling:
+        values["hpa"] = {
+            "enabled": True,
+            "minReplicas": 1,
+            "maxReplicas": 3,
+            "targetCPUPercent": 10000,
+            "requestsPerSecond": 0.1,
+            "scaleDownSeconds": 30,
+        }
     objects = rehearsal_objects(
         run(
             [
@@ -95,6 +109,16 @@ def main():
         )
     )
     with local_cluster() as command:
+        if args.request_scaling:
+            api = json.loads(
+                run(command + ["get", "apiservice", "v1beta1.custom.metrics.k8s.io", "-o", "json"])
+            )
+            if not any(
+                c.get("type") == "Available" and c.get("status") == "True"
+                for c in api.get("status", {}).get("conditions", [])
+            ):
+                raise ValueError("The reviewed metrics adapter must be available")
+
         existing = json.loads(run(command + ["get", "secrets", "-n", "eps", "-o", "json"]))
         named = {obj["metadata"]["name"]: obj for obj in existing["items"]}
         required = {"eps", "eps-db-admin", "eps-exporter"}

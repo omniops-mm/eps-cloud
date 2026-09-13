@@ -137,3 +137,35 @@ def test_tracing_egress_rejects_broad_clients():
         changed["spec"]["egress"][0]["to"][0][key] = {}
         with pytest.raises(ValueError):
             validate_tracing([web, changed], True)
+
+
+def test_request_scaling_has_one_owner_and_requires_monitoring():
+    import shutil
+    import subprocess
+
+    import pytest
+    import yaml
+
+    from scripts.check_deploy import ROOT
+
+    if not shutil.which("helm"):
+        pytest.skip("Helm is required")
+    command = ["helm", "template", "eps", str(ROOT / "deploy/helm/eps"), "-n", "eps-check"]
+    for extra, count in [
+        ([], 1),
+        (["--set", "hpa.requestsPerSecond=0.5,monitoring.enabled=true"], 2),
+    ]:
+        objects = [o for o in yaml.safe_load_all(subprocess.check_output(command + extra)) if o]
+        owners = [o for o in objects if o["kind"] in {"ScaledObject", "HorizontalPodAutoscaler"}]
+        assert len(owners) == 1 and owners[0]["kind"] == "HorizontalPodAutoscaler"
+        metrics = owners[0]["spec"]["metrics"]
+        assert len(metrics) == count
+        if count == 2:
+            assert metrics[1]["pods"]["metric"]["name"] == "eps_http_requests_per_second"
+            assert metrics[1]["pods"]["target"]["averageValue"] == "0.5"
+    assert (
+        subprocess.run(
+            command + ["--set", "hpa.requestsPerSecond=1"], capture_output=True, check=False
+        ).returncode
+        != 0
+    )

@@ -191,6 +191,18 @@ def validate_monitoring_platform(objects: list[dict], chart: str) -> None:
             and "grafana" in name
         ):
             raise ValueError("Grafana must not receive Kubernetes API permissions")
+        if (
+            chart == "prometheus-blackbox-exporter"
+            and kind == "ConfigMap"
+            and "blackbox.yaml" in obj.get("data", {})
+        ):
+            module = yaml.safe_load(obj["data"]["blackbox.yaml"])["modules"]["eps_https"]
+            if (
+                module["http"].get("tls_config")
+                != {"ca_file": "/etc/eps-ca/ca.crt", "server_name": "eps.localtest.me"}
+                or module["http"].get("follow_redirects") is not False
+            ):
+                raise ValueError("Ingress probe must validate its private CA and refuse redirects")
         if kind in {"Prometheus", "Alertmanager"}:
             spec = obj["spec"]
             if not spec.get("image", "").startswith("dhi.io/") or "@sha256:" not in spec["image"]:
@@ -402,6 +414,8 @@ def main() -> None:
                     "--namespace",
                     pin.get("namespace", name),
                     "--include-crds",
+                    "--api-versions",
+                    "apiregistration.k8s.io/v1",
                     "-f",
                     str(PLATFORM / f"{name}-values.yaml"),
                 ]
@@ -411,7 +425,12 @@ def main() -> None:
                 objects = [obj for obj in yaml.safe_load_all(output) if obj]
                 if namespace:
                     validate_eso_scope(objects, namespace)
-                if name in {"kube-prometheus-stack", "prometheus-postgres-exporter"}:
+                if name in {
+                    "kube-prometheus-stack",
+                    "prometheus-postgres-exporter",
+                    "prometheus-blackbox-exporter",
+                    "prometheus-adapter",
+                }:
                     validate_monitoring_platform(objects, name)
                 if name in {"alloy", "loki", "tempo"}:
                     validate_telemetry(objects, name)
@@ -433,12 +452,14 @@ def main() -> None:
             "eso-identities.yaml",
             "exporter-networkpolicies.yaml",
             "telemetry-network.yaml",
+            "blackbox-network.yaml",
         ):
             core.extend(o for o in yaml.safe_load_all((PLATFORM / filename).read_text()) if o)
         for filename in (
             "external-secrets.yaml",
             "secret-store.yaml.example",
             "eso-webhook-issuer.yaml",
+            "private-issuer.yaml",
         ):
             custom.extend(o for o in yaml.safe_load_all((PLATFORM / filename).read_text()) if o)
         custom += [obj for obj in core if (obj["apiVersion"], obj["kind"]) in schemas]

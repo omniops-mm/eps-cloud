@@ -18,7 +18,7 @@ def main():
     if not helm:
         raise RuntimeError("Helm is required on PATH")
     pins = json.loads((PLATFORM / "versions.json").read_text())
-    charts = ("kube-prometheus-stack", "loki", "tempo", "alloy")
+    charts = ("kube-prometheus-stack", "loki", "tempo", "alloy", "prometheus-adapter")
     with tempfile.TemporaryDirectory(prefix="eps-monitoring-") as temporary:
         archives = {}
         for chart in charts:

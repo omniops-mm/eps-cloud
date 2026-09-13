@@ -1,0 +1,80 @@
+fullnameOverride: blackbox
+automountServiceAccountToken: false
+image:
+  registry: dhi.io
+  repository: blackbox-exporter
+  tag: 0.28.0
+  digest: sha256:fcb95dbde4b41bee63d289be683832c02cc751f3895f4dbe8d9004329bc9513f
+  pullSecrets:
+  - dhi-pull
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+    - ALL
+config:
+  modules:
+    eps_https:
+      prober: http
+      timeout: 5s
+      http:
+        preferred_ip_protocol: ip4
+        valid_status_codes:
+        - 200
+        follow_redirects: false
+        tls_config:
+          ca_file: /etc/eps-ca/ca.crt
+          server_name: eps.localtest.me
+        headers:
+          Host: eps.localtest.me
+extraVolumes:
+- name: eps-ca
+  configMap:
+    name: eps-ingress-ca
+extraVolumeMounts:
+- name: eps-ca
+  mountPath: /etc/eps-ca
+  readOnly: true
+serviceMonitor:
+  enabled: true
+  defaults:
+    labels:
+      release: monitoring
+    interval: 30s
+    scrapeTimeout: 10s
+    module: eps_https
+  targets:
+  - name: eps-ingress
+    url: https://traefik.kube-system.svc.cluster.local/readyz
+    hostname: eps.localtest.me
+prometheusRule:
+  enabled: true
+  additionalLabels:
+    release: monitoring
+  rules:
+  - alert: EPSIngressProbeFailed
+    expr: probe_success{instance="https://traefik.kube-system.svc.cluster.local/readyz"}
+      == 0
+    for: 2m
+    labels:
+      severity: critical
+      namespace: eps
+    annotations:
+      summary: The internal EPS ingress path is failing.
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 96Mi

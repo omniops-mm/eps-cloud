@@ -50,5 +50,21 @@
     "sha256": "fad57f9ddd7d65f46158ee3455d32b7de6b3c1e4a3ce35757d2a8c5b2eb4481b",
     "release": "tempo",
     "namespace": "monitoring"
+  },
+  "prometheus-blackbox-exporter": {
+    "repository": "https://prometheus-community.github.io/helm-charts",
+    "version": "11.18.0",
+    "appVersion": "v0.28.0",
+    "sha256": "19322b26614c62d6277a1471e26c0b5379ce9ebf43897e01ab85d3e164594ab8",
+    "release": "blackbox",
+    "namespace": "monitoring"
+  },
+  "prometheus-adapter": {
+    "repository": "https://prometheus-community.github.io/helm-charts",
+    "version": "5.3.0",
+    "appVersion": "v0.12.0",
+    "sha256": "aa6752b6207ed788522714c3ef7f67f27d423eb4d9512fecb52dc641b6434f31",
+    "release": "prometheus-adapter",
+    "namespace": "monitoring"
   }
 }

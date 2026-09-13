@@ -53,6 +53,9 @@ hpa:
   minReplicas: 2
   maxReplicas: 6
   targetCPUPercent: 70
+  # Requires the reviewed Prometheus Adapter; zero retains the native CPU HPA.
+  requestsPerSecond: 0
+  scaleDownSeconds: 300
 
 # Enable secure cookies for HTTPS deployments.
 secureCookies: false

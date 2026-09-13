@@ -206,3 +206,17 @@ spec: {type: ClusterIP}
     assert all(obj["metadata"]["namespace"] == "eps" for obj in objects)
     with pytest.raises(ValueError, match="escaped"):
         rehearsal_objects("kind: Service\nmetadata: {name: web, namespace: production}")
+
+
+def test_blackbox_rejects_disabled_tls_validation():
+    from scripts.check_platform import validate_monitoring_platform
+
+    obj = {
+        "kind": "ConfigMap",
+        "metadata": {"name": "blackbox"},
+        "data": {
+            "blackbox.yaml": "modules: {eps_https: {http: {tls_config: {insecure_skip_verify: true}}}}"
+        },
+    }
+    with pytest.raises(ValueError, match="private CA"):
+        validate_monitoring_platform([obj], "prometheus-blackbox-exporter")

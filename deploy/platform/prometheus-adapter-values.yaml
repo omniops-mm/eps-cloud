@@ -1,0 +1,52 @@
+fullnameOverride: prometheus-adapter
+image:
+  repository: dhi.io/prometheus-adapter
+  tag: 0.12.0@sha256:ca96482a7f71874141ec6714c09ddec8c5f1dd093b4d26247e57708b3f2d6e15
+  pullSecrets:
+  - dhi-pull
+prometheus:
+  url: http://monitoring-prometheus.monitoring.svc.cluster.local
+  port: 9090
+certManager:
+  enabled: true
+rules:
+  default: false
+  custom:
+  - seriesQuery: eps_http_requests_total{namespace="eps",pod!=""}
+    resources:
+      overrides:
+        namespace:
+          resource: namespace
+        pod:
+          resource: pod
+    name:
+      matches: ^eps_http_requests_total$
+      as: eps_http_requests_per_second
+    metricsQuery: sum(rate(<<.Series>>{<<.LabelMatchers>>}[1m])) by (<<.GroupBy>>)
+metricsRelistInterval: 30s
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+    - ALL
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 192Mi
+rbac:
+  customMetrics:
+    resources:
+    - pods/eps_http_requests_per_second

@@ -1,4 +1,7 @@
 {{- if .Values.hpa.enabled }}
+{{- if and (gt (float64 .Values.hpa.requestsPerSecond) 0.0) (not .Values.monitoring.enabled) }}
+{{- fail "Request scaling requires monitoring.enabled" }}
+{{- end }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -10,6 +13,9 @@ spec:
     name: web
   minReplicas: {{ .Values.hpa.minReplicas }}
   maxReplicas: {{ .Values.hpa.maxReplicas }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: {{ .Values.hpa.scaleDownSeconds }}
   metrics:
     - type: Resource
       resource:
@@ -18,4 +24,13 @@ spec:
           type: Utilization
           # Percent of the cpu request, not the limit.
           averageUtilization: {{ .Values.hpa.targetCPUPercent }}
+    {{- if gt (float64 .Values.hpa.requestsPerSecond) 0.0 }}
+    - type: Pods
+      pods:
+        metric:
+          name: eps_http_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.hpa.requestsPerSecond | quote }}
+    {{- end }}
 {{- end }}

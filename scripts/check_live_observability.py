@@ -1,7 +1,9 @@
 """Verify local scrape, log and trace correlation without printing payloads."""
 
+import argparse
 import base64
 import json
+import secrets
 import socket
 import subprocess
 import time
@@ -184,8 +186,219 @@ def check_alert_delivery(command):
         run(command + ["delete", "prometheusrule", name, "-n", "eps"])
 
 
+def replace_stateful_pod(command, namespace, name):
+    """Replace one pod and require its persistent-volume identities to remain unchanged."""
+
+    def snapshot():
+        pod = json.loads(run(command + ["get", "pod", name + "-0", "-n", namespace, "-o", "json"]))
+        claims = [
+            v["persistentVolumeClaim"]["claimName"]
+            for v in pod["spec"]["volumes"]
+            if "persistentVolumeClaim" in v
+        ]
+        if not claims or not any(
+            o.get("kind") == "StatefulSet" and o.get("name") == name
+            for o in pod["metadata"].get("ownerReferences", [])
+        ):
+            raise ValueError("Expected a persistent StatefulSet pod")
+        volumes = {
+            claim: json.loads(run(command + ["get", "pvc", claim, "-n", namespace, "-o", "json"]))[
+                "metadata"
+            ]["uid"]
+            for claim in claims
+        }
+        return pod["metadata"]["uid"], volumes
+
+    before, volumes = snapshot()
+    run(command + ["rollout", "restart", "statefulset/" + name, "-n", namespace])
+    run(command + ["rollout", "status", "statefulset/" + name, "-n", namespace, "--timeout=150s"])
+    after, retained = snapshot()
+    if before == after or volumes != retained:
+        raise ValueError("Pod replacement or volume retention check failed")
+    print(f"PASS: {name} replacement ready with the same PVC identities", flush=True)
+
+
+def check_database_restart(command):
+    table = "eps_recovery_" + uuid.uuid4().hex
+
+    def query(sql):
+        code = (
+            "import os,psycopg; c=psycopg.connect(os.environ['DATABASE_URL'].replace('postgresql+psycopg:', 'postgresql:')); c.autocommit=True; r=c.execute("
+            + repr(sql)
+            + "); print(r.fetchone()[0] if r.description else 'OK'); c.close()"
+        )
+        return run(
+            command + ["exec", "-n", "eps", "deployment/web", "--", "python", "-c", code]
+        ).strip()
+
+    query(f"CREATE TABLE {table} (value integer); INSERT INTO {table} VALUES (42)")
+    try:
+        replace_stateful_pod(command, "eps", "db")
+        if query(f"SELECT value FROM {table}") != b"42":
+            raise ValueError("Database canary did not survive replacement")
+        print("PASS: database canary survived replacement", flush=True)
+    finally:
+        query(f"DROP TABLE IF EXISTS {table}")
+
+
+def check_maintenance(command):
+    secret = json.loads(run(command + ["get", "secret", "eps", "-n", "eps", "-o", "json"]))
+    if secret["metadata"].get("labels", {}).get("eps.local/purpose") != "observability":
+        raise ValueError("Signing-key drill requires owned local test credentials")
+    if json.loads(run(command + ["get", "externalsecrets", "-n", "eps", "-o", "json"]))["items"]:
+        raise ValueError("Refusing to rotate externally managed credentials")
+    code = "from app import create_app; from flask.sessions import SecureCookieSessionInterface; a=create_app(); print(SecureCookieSessionInterface().get_signing_serializer(a).dumps({'test':42}))"
+    cookie = run(
+        command + ["exec", "-n", "eps", "deployment/web", "--", "python", "-c", code]
+    ).strip()
+    secret["data"]["SECRET_KEY"] = base64.b64encode(secrets.token_urlsafe(32).encode()).decode()
+    run(command + ["replace", "-f", "-"], json.dumps(secret).encode())
+    run(command + ["rollout", "restart", "deployment/web", "-n", "eps"])
+    run(command + ["rollout", "status", "deployment/web", "-n", "eps", "--timeout=150s"])
+    code = """import sys
+from app import create_app
+from flask.sessions import SecureCookieSessionInterface
+from itsdangerous import BadSignature
+signer=SecureCookieSessionInterface().get_signing_serializer(create_app())
+try: signer.loads(sys.stdin.read().strip())
+except BadSignature: pass
+else: raise RuntimeError('Old signing key remains valid')
+assert signer.loads(signer.dumps({'test':42})) == {'test':42}
+print('PASS')
+"""
+    if (
+        run(
+            command + ["exec", "-i", "-n", "eps", "deployment/web", "--", "python", "-c", code],
+            cookie,
+        ).strip()
+        != b"PASS"
+    ):
+        raise ValueError("Signing-key rotation check failed")
+    print(
+        "PASS: old signed state rejected and new signed state accepted after local key rotation",
+        flush=True,
+    )
+    jobs = json.loads(run(command + ["get", "jobs", "-n", "eps", "-o", "json"]))["items"]
+    if any(j.get("status", {}).get("active", 0) for j in jobs):
+        raise ValueError("Wait for active jobs before catch-up checks")
+    for source in ("cleanup-audit-log", "refresh-weather"):
+        name = "eps-catchup-" + uuid.uuid4().hex[:12]
+        run(command + ["create", "job", name, "-n", "eps", "--from=cronjob/" + source])
+        try:
+            run(
+                command
+                + ["wait", "job/" + name, "-n", "eps", "--for=condition=Complete", "--timeout=150s"]
+            )
+            print(f"PASS: explicit {source} catch-up completed", flush=True)
+        finally:
+            run(command + ["delete", "job", name, "-n", "eps"])
+
+
+def check_scaling(command):
+    def hpa():
+        return json.loads(run(command + ["get", "hpa", "web", "-n", "eps", "-o", "json"]))
+
+    config = hpa()["spec"]
+    if (
+        config["minReplicas"] != 1
+        or config["maxReplicas"] != 3
+        or config["metrics"][0]["resource"]["target"]["averageUtilization"] != 10000
+    ):
+        raise ValueError("Use the bounded request-scaling rehearsal settings first")
+    session = requests.Session()
+    session.trust_env = False
+    with forward(command, "eps", "web", 8000) as web:
+        for _ in range(120):
+            response = session.get(web + "/", timeout=5, allow_redirects=False)
+            if response.status_code != 200:
+                raise RuntimeError("Read-only scaling traffic failed")
+            time.sleep(0.5)
+    for _ in range(45):
+        state = hpa()["status"]
+        if state.get("currentReplicas", 0) >= 2 and state.get("desiredReplicas", 0) >= 2:
+            print(
+                "PASS: request metric scaled web above one replica with CPU target deliberately unreachable",
+                flush=True,
+            )
+            break
+        time.sleep(2)
+    else:
+        raise RuntimeError("Request-driven scale-up was not observed")
+    run(command + ["scale", "deployment/prometheus-adapter", "-n", "monitoring", "--replicas=0"])
+    try:
+        run(
+            command
+            + [
+                "wait",
+                "apiservice/v1beta1.custom.metrics.k8s.io",
+                "--for=condition=Available=false",
+                "--timeout=60s",
+            ]
+        )
+        result = subprocess.run(
+            command
+            + [
+                "get",
+                "--raw=/apis/custom.metrics.k8s.io/v1beta1/namespaces/eps/pods/*/eps_http_requests_per_second",
+            ],
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+        if result.returncode == 0:
+            raise ValueError("Missing metrics unexpectedly returned a successful response")
+        print(
+            "PASS: unavailable request metrics return an API error rather than zero load",
+            flush=True,
+        )
+    finally:
+        run(
+            command + ["scale", "deployment/prometheus-adapter", "-n", "monitoring", "--replicas=1"]
+        )
+        run(
+            command
+            + [
+                "rollout",
+                "status",
+                "deployment/prometheus-adapter",
+                "-n",
+                "monitoring",
+                "--timeout=150s",
+            ]
+        )
+    for _ in range(90):
+        if hpa()["status"].get("currentReplicas") == 1:
+            print("PASS: adapter recovered and web downscaled after traffic stopped", flush=True)
+            return
+        time.sleep(2)
+    raise RuntimeError("Bounded local downscale was not observed")
+
+
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--restart",
+        action="store_true",
+        help="Replace local stateful pods and verify retained data",
+    )
+    parser.add_argument(
+        "--maintenance",
+        action="store_true",
+        help="Rotate the owned local signing key and run bounded catch-up jobs",
+    )
+    parser.add_argument(
+        "--scaling",
+        action="store_true",
+        help="Run bounded read-only load and adapter outage/recovery checks",
+    )
+    args = parser.parse_args()
     with local_cluster() as command:
+        if args.scaling:
+            check_scaling(command)
+            return
+        if args.maintenance:
+            check_maintenance(command)
+            return
         session = requests.Session()
         session.trust_env = False
         marker = "private-" + uuid.uuid4().hex
@@ -280,9 +493,33 @@ def main():
                 "PASS: actual app request reaches Loki and its trace is retrievable from Tempo; query/header marker absent",
                 flush=True,
             )
-        check_network(command)
-        check_alert_delivery(command)
-    print("Temporary tunnels, probe pod and alert rule removed. Recovery checks are separate.")
+            if args.restart:
+                historical_time = time.time() - 30
+                parameters = {"query": 'pg_up{namespace="eps"}', "time": historical_time}
+                historical = get("prometheus", "/api/v1/query", parameters)["data"]["result"]
+                if not historical:
+                    raise ValueError("Historical metric sample is required")
+                for name in ("loki", "tempo", "prometheus-monitoring-prometheus"):
+                    replace_stateful_pod(command, "monitoring", name)
+                recovered_logs = get(
+                    "loki",
+                    "/loki/api/v1/query_range",
+                    {"query": '{namespace="eps",app="web"} |= "' + request_id + '"', "limit": 100},
+                )["data"]["result"]
+                if not recovered_logs or not get("tempo", f"/api/traces/{trace_id}"):
+                    raise ValueError("Pre-restart telemetry was not recovered")
+                if get("prometheus", "/api/v1/query", parameters)["data"]["result"] != historical:
+                    raise ValueError("Historical metrics changed across replacement")
+                print(
+                    "PASS: pre-restart log, trace and historical metric sample recovered",
+                    flush=True,
+                )
+        if args.restart:
+            check_database_restart(command)
+        else:
+            check_network(command)
+            check_alert_delivery(command)
+    print("Temporary resources removed; local workloads and volumes retained.")
 
 
 if __name__ == "__main__":

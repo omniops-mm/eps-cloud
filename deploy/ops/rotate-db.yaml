@@ -1,0 +1,77 @@
+# Manual maintenance only: quiesce writers and synchronize private credentials first.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rotate-db-password
+  namespace: eps
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 120
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: migrate
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      imagePullSecrets:
+      - name: dhi-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: rotate
+        image: dhi.io/postgres:16.15-alpine3.24@sha256:873f9a267256074af3f047f10d9f0015f73aa959194bcea45075eb98afe9b9cb
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: PGHOST
+          value: db
+        - name: PGDATABASE
+          value: eps
+        - name: PGUSER
+          value: eps_admin
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: eps-db-admin
+              key: POSTGRES_PASSWORD
+        - name: NEW_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: eps
+              key: POSTGRES_PASSWORD
+        command:
+        - /bin/sh
+        - -ec
+        args:
+        - 'psql -X -q -w -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<''SQL''
+
+          SET log_statement = ''none'';
+
+          SET log_min_error_statement = ''panic'';
+
+          \getenv password NEW_PASSWORD
+
+          SELECT format(''ALTER ROLE eps PASSWORD %L'', :''password'') \gexec
+
+          SQL
+
+          printf ''Database role update completed.\n''
+
+          '
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 96Mi

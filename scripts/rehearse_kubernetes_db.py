@@ -1,5 +1,6 @@
 """User-run Helm database/PVC rehearsal in an isolated, disposable namespace."""
 
+import argparse
 import base64
 import json
 import secrets
@@ -38,6 +39,13 @@ def database_objects(objects, namespace):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--restore-source",
+        action="store_true",
+        help="Restore the local eps database into the isolated test PVC",
+    )
+    args = parser.parse_args()
     helm = shutil.which("helm") or str(
         Path.home() / "Desktop/LinuxDev/EPS-reference/EPS-v0.4-work/tools/bin/helm.exe"
     )
@@ -207,12 +215,115 @@ def main():
                 != "t"
             ):
                 raise ValueError("Exporter monitoring grant missing")
+            if args.restore_source:
+                backup = run(
+                    command
+                    + [
+                        "exec",
+                        "-n",
+                        "eps",
+                        "db-0",
+                        "-c",
+                        "postgres",
+                        "--",
+                        "/bin/sh",
+                        "-ec",
+                        'export PGPASSWORD="$POSTGRES_PASSWORD"; exec pg_dump -h 127.0.0.1 -U eps_admin -d eps --format=custom --no-owner --no-acl',
+                    ]
+                )
+                if not backup.startswith(b"PGDMP"):
+                    raise ValueError("Expected a PostgreSQL custom archive")
+                run(
+                    command
+                    + [
+                        "exec",
+                        "-i",
+                        "-n",
+                        namespace,
+                        "db-0",
+                        "-c",
+                        "postgres",
+                        "--",
+                        "/bin/sh",
+                        "-ec",
+                        "IFS= read -r PGPASSWORD; export PGPASSWORD; exec pg_restore -h 127.0.0.1 -U eps -d eps --exit-on-error --no-owner --no-acl",
+                    ],
+                    passwords["app"].encode() + b"\n" + backup,
+                )
+                del backup
+                source_version = (
+                    run(
+                        command
+                        + [
+                            "exec",
+                            "-n",
+                            "eps",
+                            "db-0",
+                            "-c",
+                            "postgres",
+                            "--",
+                            "/bin/sh",
+                            "-ec",
+                            'export PGPASSWORD="$POSTGRES_PASSWORD"; exec psql -X -w -A -t -h 127.0.0.1 -U eps_admin -d eps -c "SELECT version_num FROM alembic_version"',
+                        ]
+                    )
+                    .decode()
+                    .strip()
+                )
+                if (
+                    not source_version
+                    or query("eps", passwords["app"], "SELECT version_num FROM alembic_version")
+                    != source_version
+                ):
+                    raise ValueError("Restored migration version differs from source")
+                print(
+                    "PASS: source database archive crossed the host and restored into an isolated PVC; migration version matches",
+                    flush=True,
+                )
             query(
                 "eps",
                 passwords["app"],
                 "CREATE TABLE rehearsal_canary (value integer); INSERT INTO rehearsal_canary VALUES (1)",
             )
             print("PASS: application and exporter authenticate with the expected privileges")
+            previous = passwords["app"]
+            replacement = secrets.token_urlsafe(32)
+            sql = "SET log_statement='none'; SET log_min_error_statement='panic';\n\\getenv replacement NEW_PASSWORD\nSELECT format('ALTER ROLE eps PASSWORD %L', :'replacement') \\gexec\n"
+            run(
+                command
+                + [
+                    "exec",
+                    "-i",
+                    "-n",
+                    namespace,
+                    "db-0",
+                    "-c",
+                    "postgres",
+                    "--",
+                    "/bin/sh",
+                    "-ec",
+                    "IFS= read -r PGPASSWORD; IFS= read -r NEW_PASSWORD; export PGPASSWORD NEW_PASSWORD; exec psql -X -q -w -v ON_ERROR_STOP=1 -h 127.0.0.1 -U eps_admin -d eps",
+                ],
+                (passwords["admin"] + "\n" + replacement + "\n" + sql).encode(),
+            )
+            if query("eps", replacement, "SELECT 1") != "1":
+                raise ValueError("New database password failed")
+            try:
+                query("eps", previous, "SELECT 1")
+            except RuntimeError:
+                pass
+            else:
+                raise ValueError("Old database password still works")
+            secret = json.loads(
+                run(command + ["get", "secret", "eps", "-n", namespace, "-o", "json"])
+            )
+            secret["data"]["POSTGRES_PASSWORD"] = base64.b64encode(replacement.encode()).decode()
+            run(command + ["replace", "-f", "-"], json.dumps(secret).encode())
+            passwords["app"] = replacement
+            print(
+                "PASS: isolated password rotation accepts new credentials and rejects old credentials",
+                flush=True,
+            )
             old = json.loads(run(command + ["get", "pod", "db-0", "-n", namespace, "-o", "json"]))[
                 "metadata"
             ]["uid"]

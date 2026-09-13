@@ -63,3 +63,8 @@ migration:
 # Requires an installed monitoring platform with matching CRDs and selectors.
 monitoring:
   enabled: false
+
+# Enable only after the private Tempo backend passes its live checks.
+tracing:
+  enabled: false
+  sampleRate: 0.1

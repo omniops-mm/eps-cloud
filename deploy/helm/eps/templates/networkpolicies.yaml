@@ -132,3 +132,23 @@ spec:
     ports:
     - protocol: TCP
       port: 8000
+
+{{- if .Values.tracing.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-to-tempo
+spec:
+  podSelector:
+    matchLabels: {app: web}
+  policyTypes: [Egress]
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels: {kubernetes.io/metadata.name: monitoring}
+      podSelector:
+        matchLabels: {app.kubernetes.io/name: tempo}
+    ports:
+    - {protocol: TCP, port: 4318}
+{{- end }}

@@ -3,7 +3,7 @@
 from flask import Flask
 from flask_wtf.csrf import CSRFProtect
 
-from app import db, metrics, request_log
+from app import db, metrics, request_log, tracing
 from app.config import get_settings
 from app.logging import configure_logging
 from app.routes import calendar, dashboard, health, journal, settings
@@ -20,6 +20,7 @@ def create_app() -> Flask:
         SESSION_COOKIE_SECURE=get_settings().secure_cookies,
     )
     db.init_app(app)
+    tracing.init_app(app)
     metrics.init_app(app)
     request_log.init_app(app)
     CSRFProtect(app)

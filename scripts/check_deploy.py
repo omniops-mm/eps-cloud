@@ -157,6 +157,44 @@ def validate_gitops(objects: list[dict]) -> None:
         raise ValueError("GitOps requires one blocking Sync migration hook")
 
 
+def validate_tracing(objects: list[dict], enabled: bool) -> None:
+    web = next(o for o in objects if o["kind"] == "Deployment" and o["metadata"]["name"] == "web")
+    env = web["spec"]["template"]["spec"]["containers"][0]["env"]
+    configured = {e["name"]: e.get("value") for e in env if e["name"].startswith("TRACING_")}
+    policies = [
+        o
+        for o in objects
+        if o["kind"] == "NetworkPolicy" and o["metadata"]["name"] == "web-to-tempo"
+    ]
+    if not enabled:
+        if configured or policies:
+            raise ValueError("Tracing must remain disabled by default")
+        return
+    if (
+        configured != {"TRACING_ENABLED": "true", "TRACING_SAMPLE_RATE": "0.1"}
+        or len(policies) != 1
+    ):
+        raise ValueError("Unexpected tracing enablement or sampling configuration")
+    if policies[0]["spec"] != {
+        "podSelector": {"matchLabels": {"app": "web"}},
+        "policyTypes": ["Egress"],
+        "egress": [
+            {
+                "to": [
+                    {
+                        "namespaceSelector": {
+                            "matchLabels": {"kubernetes.io/metadata.name": "monitoring"}
+                        },
+                        "podSelector": {"matchLabels": {"app.kubernetes.io/name": "tempo"}},
+                    }
+                ],
+                "ports": [{"protocol": "TCP", "port": 4318}],
+            }
+        ],
+    }:
+        raise ValueError("Tracing egress must target only the private Tempo HTTP receiver")
+
+
 def main() -> None:
     validate_host_configs(
         yaml.safe_load((ROOT / "deploy/k3d.yaml").read_text()),
@@ -178,6 +216,7 @@ def main() -> None:
                 output = subprocess.check_output(args, text=True)
                 objects = [obj for obj in yaml.safe_load_all(output) if obj]
                 validate_objects(objects)
+                validate_tracing(objects, False)
                 if production and mode == "job":
                     validate_gitops(objects)
                 if production:
@@ -225,6 +264,28 @@ def main() -> None:
                     check=True,
                 )
                 print(f"Passed: production={production}, migration={mode}")
+        output = subprocess.check_output(
+            [
+                "helm",
+                "template",
+                "eps",
+                chart,
+                "--namespace",
+                "eps",
+                "--set",
+                "tracing.enabled=true",
+            ],
+            text=True,
+        )
+        objects = [o for o in yaml.safe_load_all(output) if o]
+        validate_objects(objects)
+        validate_tracing(objects, True)
+        target.write_text(output, encoding="utf-8")
+        subprocess.run(
+            ["kubeconform", "-strict", "-summary", "-kubernetes-version", "1.36.3", str(target)],
+            check=True,
+        )
+        print("Passed: opt-in tracing and restricted Tempo egress")
     print("App schema/security/raw checks passed; no cluster or platform validation performed")
 
 

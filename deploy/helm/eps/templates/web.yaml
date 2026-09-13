@@ -61,6 +61,10 @@ spec:
           env:
             - {name: TZ, value: {{ .Values.timezone | quote }}}
             - {name: SECURE_COOKIES, value: {{ .Values.secureCookies | quote }}}
+            {{- if .Values.tracing.enabled }}
+            - {name: TRACING_ENABLED, value: "true"}
+            - {name: TRACING_SAMPLE_RATE, value: {{ .Values.tracing.sampleRate | quote }}}
+            {{- end }}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: {drop: [ALL]}

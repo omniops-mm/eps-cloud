@@ -16,6 +16,7 @@ from prometheus_client import Counter
 from sqlalchemy.orm import Session
 
 from app.models import UserSettings, WeatherCache
+from app.tracing import outbound_span
 
 API_URL = "https://api.brightsky.dev/weather"
 FETCH_TIMEOUT_SECONDS = 3
@@ -31,9 +32,10 @@ WEATHER_FETCHES = Counter(
 def fetch_forecast(lat: decimal.Decimal, lon: decimal.Decimal, day: datetime.date) -> dict:
     """One day of hourly forecast, raw from the API. Raises on any failure."""
     query = urllib.parse.urlencode({"lat": str(lat), "lon": str(lon), "date": day.isoformat()})
-    with urllib.request.urlopen(  # fixed https host, query is ours
-        f"{API_URL}?{query}", timeout=FETCH_TIMEOUT_SECONDS
-    ) as response:
+    with (
+        outbound_span(),
+        urllib.request.urlopen(f"{API_URL}?{query}", timeout=FETCH_TIMEOUT_SECONDS) as response,
+    ):
         return json.load(response)
 
 

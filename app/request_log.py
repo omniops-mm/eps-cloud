@@ -14,6 +14,7 @@ import structlog
 from flask import Flask, Response, request
 
 from app.metrics import UNCOUNTED_ROUTES
+from app.tracing import current_trace
 
 log = structlog.get_logger("web")
 
@@ -35,7 +36,7 @@ def init_app(app: Flask) -> None:
         # threads are reused across requests, so leftover context must go first
         structlog.contextvars.clear_contextvars()
         request_id = request_id_from(request.headers.get("X-Request-ID"))
-        structlog.contextvars.bind_contextvars(request_id=request_id)
+        structlog.contextvars.bind_contextvars(request_id=request_id, **current_trace())
         request.request_id = request_id  # type: ignore[attr-defined]
         request.log_start = time.perf_counter()  # type: ignore[attr-defined]
 

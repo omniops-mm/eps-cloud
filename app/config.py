@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +12,8 @@ class Settings(BaseSettings):
     database_url: str
     secret_key: str
     secure_cookies: bool = False
+    tracing_enabled: bool = False
+    tracing_sample_rate: float = Field(default=0.1, ge=0, le=1, allow_inf_nan=False)
     # IANA timezone name. Dates shown to the user are computed in this zone,
     # not in the server's clock, which runs UTC inside containers.
     tz: str = "Europe/Berlin"

@@ -89,3 +89,51 @@ def test_host_configuration_regressions_are_rejected():
         changed[2]["spec"]["valuesContent"] = yaml.safe_dump(values)
         with pytest.raises(ValueError, match="Traefik"):
             validate_host_configs(*changed)
+
+
+def test_tracing_egress_rejects_broad_clients():
+    from copy import deepcopy
+
+    import pytest
+
+    from scripts.check_deploy import validate_tracing
+
+    web: dict = {
+        "kind": "Deployment",
+        "metadata": {"name": "web"},
+        "spec": {"template": {"spec": {"containers": [{"env": []}]}}},
+    }
+    validate_tracing([web], False)
+    web["spec"]["template"]["spec"]["containers"][0]["env"] = [
+        {"name": "TRACING_ENABLED", "value": "true"},
+        {"name": "TRACING_SAMPLE_RATE", "value": "0.1"},
+    ]
+    policy: dict = {
+        "kind": "NetworkPolicy",
+        "metadata": {"name": "web-to-tempo"},
+        "spec": {
+            "podSelector": {"matchLabels": {"app": "web"}},
+            "policyTypes": ["Egress"],
+            "egress": [
+                {
+                    "to": [
+                        {
+                            "namespaceSelector": {
+                                "matchLabels": {"kubernetes.io/metadata.name": "monitoring"}
+                            },
+                            "podSelector": {"matchLabels": {"app.kubernetes.io/name": "tempo"}},
+                        }
+                    ],
+                    "ports": [{"protocol": "TCP", "port": 4318}],
+                }
+            ],
+        },
+    }
+    validate_tracing([web, policy], True)
+    with pytest.raises(ValueError):
+        validate_tracing([web, policy], False)
+    for key in ("namespaceSelector", "podSelector"):
+        changed = deepcopy(policy)
+        changed["spec"]["egress"][0]["to"][0][key] = {}
+        with pytest.raises(ValueError):
+            validate_tracing([web, changed], True)

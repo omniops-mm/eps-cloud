@@ -253,6 +253,9 @@ grafana:
       searchNamespace: monitoring
       resource: configmap
       uid: prometheus
+      exemplarTraceIdDestinations:
+        datasourceUid: tempo
+        traceIdLabelName: trace_id
       enabled: true
     image:
       registry: dhi.io

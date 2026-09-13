@@ -58,3 +58,76 @@ def test_cluster_wide_eso_role_rejected():
 
     with pytest.raises(ValueError, match="cluster-wide"):
         validate_eso_scope([{"kind": "ClusterRole"}], "eps")
+
+
+def test_monitoring_access_rejects_expanded_permissions(tmp_path, monkeypatch):
+    from copy import deepcopy
+
+    import yaml
+
+    from scripts import check_platform
+
+    files = (
+        "grafana-dashboard-rbac.yaml",
+        "external-secrets.yaml",
+        "exporter-networkpolicies.yaml",
+    )
+    original = {
+        name: list(yaml.safe_load_all((check_platform.PLATFORM / name).read_text()))
+        for name in files
+    }
+    monkeypatch.setattr(check_platform, "PLATFORM", tmp_path)
+
+    def write(documents):
+        for name, objects in documents.items():
+            (tmp_path / name).write_text(yaml.safe_dump_all(objects))
+
+    write(original)
+    check_platform.validate_monitoring_access()
+    changed = deepcopy(original)
+    changed[files[0]][0]["rules"][0]["resources"].append("secrets")
+    write(changed)
+    with pytest.raises(ValueError, match="ConfigMap-only"):
+        check_platform.validate_monitoring_access()
+    changed = deepcopy(original)
+    changed[files[0]][1]["subjects"][0]["namespace"] = "default"
+    write(changed)
+    with pytest.raises(ValueError, match="ConfigMap-only"):
+        check_platform.validate_monitoring_access()
+    changed = deepcopy(original)
+    exporter = next(o for o in changed[files[1]] if o["metadata"]["name"] == "eps-exporter")
+    exporter["metadata"]["namespace"] = "monitoring"
+    write(changed)
+    with pytest.raises(ValueError, match="credentials must stay"):
+        check_platform.validate_monitoring_access()
+    changed = deepcopy(original)
+    changed[files[2]][1]["spec"]["ingress"][0]["from"][0]["namespaceSelector"] = {}
+    write(changed)
+    with pytest.raises(ValueError, match="policy scope"):
+        check_platform.validate_monitoring_access()
+
+
+def test_monitoring_platform_rejects_public_access_and_secret_rbac():
+    from scripts.check_platform import validate_monitoring_platform
+
+    validate_monitoring_platform(
+        [{"kind": "Service", "metadata": {"name": "grafana"}, "spec": {"type": "ClusterIP"}}],
+        "kube-prometheus-stack",
+    )
+    for obj in (
+        {"kind": "Service", "metadata": {"name": "grafana"}, "spec": {"type": "LoadBalancer"}},
+        {
+            "kind": "Service",
+            "metadata": {"name": "grafana"},
+            "spec": {"type": "ClusterIP", "externalIPs": ["192.0.2.1"]},
+        },
+        {
+            "kind": "Role",
+            "metadata": {"name": "grafana", "namespace": "monitoring"},
+            "rules": [{"apiGroups": [""], "resources": ["secrets"], "verbs": ["get"]}],
+        },
+        {"kind": "ClusterRole", "metadata": {"name": "grafana"}, "rules": []},
+        {"kind": "Ingress", "metadata": {"name": "grafana"}},
+    ):
+        with pytest.raises(ValueError):
+            validate_monitoring_platform([obj], "kube-prometheus-stack")

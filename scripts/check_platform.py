@@ -12,6 +12,24 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 PLATFORM = ROOT / "deploy/platform"
 
+# Kubernetes CRDs may contain an unquoted '=' enum, tagged by YAML 1.1.
+yaml.SafeLoader.add_constructor("tag:yaml.org,2002:value", lambda loader, node: node.value)
+
+
+def reject_unknown_fields(schema: object) -> None:
+    """Close defined objects and normalize equivalent Go/Python regex syntax."""
+    if isinstance(schema, dict):
+        # Python requires global regex flags before anchors; Go accepts either order.
+        if str(schema.get("pattern", "")).startswith("^(?i)"):
+            schema["pattern"] = "(?i)^" + schema["pattern"][5:]
+        if "properties" in schema and not schema.get("x-kubernetes-preserve-unknown-fields"):
+            schema.setdefault("additionalProperties", False)
+        for value in schema.values():
+            reject_unknown_fields(value)
+    elif isinstance(schema, list):
+        for value in schema:
+            reject_unknown_fields(value)
+
 
 def validate_eso_role_extensions(obj: dict) -> None:
     labels = obj.get("metadata", {}).get("labels", {})
@@ -111,11 +129,153 @@ def validate_federation(identities: list[dict], stores: list[dict]) -> None:
             raise ValueError("SecretStore must explicitly use the scoped federation identity")
 
 
+def validate_monitoring_access() -> None:
+    """Keep dashboard API permissions separate from database credentials."""
+    objects = list(yaml.safe_load_all((PLATFORM / "grafana-dashboard-rbac.yaml").read_text()))
+    if len(objects) != 4:
+        raise ValueError("Expected Grafana roles and bindings in exactly two namespaces")
+    for namespace in ("eps", "monitoring"):
+        role = next(
+            o for o in objects if o["kind"] == "Role" and o["metadata"]["namespace"] == namespace
+        )
+        binding = next(
+            o
+            for o in objects
+            if o["kind"] == "RoleBinding" and o["metadata"]["namespace"] == namespace
+        )
+        if (
+            role["rules"]
+            != [{"apiGroups": [""], "resources": ["configmaps"], "verbs": ["get", "list", "watch"]}]
+            or binding["subjects"]
+            != [{"kind": "ServiceAccount", "name": "grafana", "namespace": "monitoring"}]
+            or binding["roleRef"]
+            != {
+                "apiGroup": "rbac.authorization.k8s.io",
+                "kind": "Role",
+                "name": role["metadata"]["name"],
+            }
+        ):
+            raise ValueError("Grafana API access must be ConfigMap-only in eps and monitoring")
+    secrets = list(yaml.safe_load_all((PLATFORM / "external-secrets.yaml").read_text()))
+    exporters = [o for o in secrets if o["metadata"]["name"] == "eps-exporter"]
+    if len(exporters) != 1 or exporters[0]["metadata"]["namespace"] != "eps":
+        raise ValueError("Database exporter credentials must stay in eps")
+    policies = list(yaml.safe_load_all((PLATFORM / "exporter-networkpolicies.yaml").read_text()))
+    if {p["metadata"]["name"] for p in policies} != {
+        "db-from-exporter",
+        "exporter-from-prometheus",
+        "exporter-to-db",
+    } or len(policies) != 3:
+        raise ValueError("Expected exactly three exporter network policies")
+    exporter = {"app.kubernetes.io/name": "prometheus-postgres-exporter"}
+    for policy in policies:
+        name = policy["metadata"]["name"]
+        target = {"app": "db"} if name == "db-from-exporter" else exporter
+        peer = {
+            "podSelector": {
+                "matchLabels": exporter if name == "db-from-exporter" else {"app": "db"}
+            }
+        }
+        if name == "exporter-from-prometheus":
+            peer = {
+                "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "monitoring"}},
+                "podSelector": {"matchLabels": {"app.kubernetes.io/name": "prometheus"}},
+            }
+        direction = "egress" if name == "exporter-to-db" else "ingress"
+        expected = {
+            "podSelector": {"matchLabels": target},
+            "policyTypes": [direction.title()],
+            direction: [
+                {
+                    "to" if direction == "egress" else "from": [peer],
+                    "ports": [
+                        {
+                            "protocol": "TCP",
+                            "port": 9187 if name == "exporter-from-prometheus" else 5432,
+                        }
+                    ],
+                }
+            ],
+        }
+        if policy["metadata"]["namespace"] != "eps" or policy["spec"] != expected:
+            raise ValueError("Exporter network policy scope changed")
+
+
+def validate_monitoring_platform(objects: list[dict], chart: str) -> None:
+    """Reject public services, unpinned images and expanded Grafana permissions."""
+    for obj in objects:
+        kind, name = obj["kind"], obj["metadata"]["name"]
+        if kind == "Ingress" or kind == "DaemonSet":
+            raise ValueError("Monitoring must not expose ingress or run host collectors")
+        if kind == "Service" and (
+            obj["spec"].get("type", "ClusterIP") != "ClusterIP" or obj["spec"].get("externalIPs")
+        ):
+            raise ValueError("Monitoring Services must stay internal")
+        if kind in {"Role", "ClusterRole"} and "grafana" in name:
+            if kind != "Role" or obj["metadata"].get("namespace") != "monitoring":
+                raise ValueError("Grafana must use namespace-scoped RBAC")
+            for rule in obj["rules"]:
+                if rule.get("resources") != ["configmaps"] or set(rule.get("verbs", [])) - {
+                    "get",
+                    "list",
+                    "watch",
+                }:
+                    raise ValueError("Grafana API access must be ConfigMap-only")
+        if kind in {"Prometheus", "Alertmanager"}:
+            spec = obj["spec"]
+            if not spec.get("image", "").startswith("dhi.io/") or "@sha256:" not in spec["image"]:
+                raise ValueError("Monitoring runtime images must be digest-pinned")
+            if spec.get("imagePullSecrets") != [{"name": "dhi-pull"}]:
+                raise ValueError("Monitoring registry access is missing")
+            if kind == "Prometheus" and (
+                spec.get("arbitraryFSAccessThroughSMs") != {"deny": True}
+                or spec.get("overrideHonorLabels") is not True
+            ):
+                raise ValueError("Prometheus scrape credentials or label boundary changed")
+        if kind != "Deployment":
+            continue
+        pod = obj["spec"]["template"]["spec"]
+        if any(pod.get(key) for key in ("hostNetwork", "hostPID", "hostIPC")) or any(
+            "hostPath" in v for v in (pod.get("volumes") or [])
+        ):
+            raise ValueError("Monitoring pods must not access the host")
+        if pod.get("securityContext", {}).get("runAsNonRoot") is not True:
+            raise ValueError("Monitoring pods must run as non-root")
+        if pod.get("imagePullSecrets") != [{"name": "dhi-pull"}]:
+            raise ValueError("Monitoring pod registry access is missing")
+        for container in (pod.get("initContainers") or []) + pod["containers"]:
+            security = container.get("securityContext", {})
+            if not container["image"].startswith("dhi.io/") or "@sha256:" not in container["image"]:
+                raise ValueError("Monitoring pod images must be digest-pinned")
+            if (
+                security.get("allowPrivilegeEscalation") is not False
+                or "ALL" not in security.get("capabilities", {}).get("drop", [])
+                or security.get("readOnlyRootFilesystem") is not True
+            ):
+                raise ValueError("Monitoring container security changed")
+        if chart == "prometheus-postgres-exporter" and (
+            pod.get("automountServiceAccountToken") is not False
+            or pod["containers"][0].get("env")
+            != [
+                {
+                    "name": "DATA_SOURCE_NAME",
+                    "valueFrom": {
+                        "secretKeyRef": {"name": "eps-exporter", "key": "DATA_SOURCE_NAME"}
+                    },
+                }
+            ]
+        ):
+            raise ValueError(
+                "Exporter must use only its existing database Secret without an API token"
+            )
+
+
 def main() -> None:
     pins = json.loads((PLATFORM / "versions.json").read_text(encoding="utf-8"))
     identities = list(yaml.safe_load_all((PLATFORM / "eso-identities.yaml").read_text()))
     stores = list(yaml.safe_load_all((PLATFORM / "secret-store.yaml.example").read_text()))
     validate_federation(identities, stores)
+    validate_monitoring_access()
     schemas = {}
     core = []
     custom: list[dict] = []
@@ -140,7 +300,7 @@ def main() -> None:
             if hashlib.sha256(archive.read_bytes()).hexdigest() != pin["sha256"]:
                 raise ValueError(f"Chart checksum mismatch: {name}")
             releases = (
-                [(name, None)]
+                [(pin.get("release", name), None)]
                 if name != "external-secrets"
                 else [
                     ("external-secrets-eps", "eps"),
@@ -154,17 +314,19 @@ def main() -> None:
                     release,
                     str(archive),
                     "--namespace",
-                    name,
+                    pin.get("namespace", name),
                     "--include-crds",
                     "-f",
                     str(PLATFORM / f"{name}-values.yaml"),
                 ]
                 if namespace:
                     args += ["-f", str(PLATFORM / f"{release}-values.yaml")]
-                output = subprocess.check_output(args, text=True)
+                output = subprocess.check_output(args, text=True, encoding="utf-8")
                 objects = [obj for obj in yaml.safe_load_all(output) if obj]
                 if namespace:
                     validate_eso_scope(objects, namespace)
+                if name in {"kube-prometheus-stack", "prometheus-postgres-exporter"}:
+                    validate_monitoring_platform(objects, name)
                 for obj in objects:
                     if name == "external-secrets":
                         validate_eso_role_extensions(obj)
@@ -176,11 +338,14 @@ def main() -> None:
                             ] = version["schema"]["openAPIV3Schema"]
                     else:
                         core.append(obj)
-        # The standard catalogue omits CRD objects. Check their embedded schemas;
-        # CRD admission and Kubernetes-specific schema extensions still need a cluster.
-        for schema in schemas.values():
-            jsonschema.Draft7Validator.check_schema(schema)
-        for filename in ("namespaces.yaml", "metadata-policy.yaml", "eso-identities.yaml"):
+        # Validate the instantiated CRD versions; admission and CEL require a cluster.
+        for filename in (
+            "namespaces.yaml",
+            "metadata-policy.yaml",
+            "eso-identities.yaml",
+            "grafana-dashboard-rbac.yaml",
+            "exporter-networkpolicies.yaml",
+        ):
             core.extend(o for o in yaml.safe_load_all((PLATFORM / filename).read_text()) if o)
         for filename in (
             "external-secrets.yaml",
@@ -190,6 +355,9 @@ def main() -> None:
             custom.extend(o for o in yaml.safe_load_all((PLATFORM / filename).read_text()) if o)
         custom += [obj for obj in core if (obj["apiVersion"], obj["kind"]) in schemas]
         core = [obj for obj in core if (obj["apiVersion"], obj["kind"]) not in schemas]
+        for key in {(obj["apiVersion"], obj["kind"]) for obj in custom}:
+            reject_unknown_fields(schemas[key])
+            jsonschema.Draft7Validator.check_schema(schemas[key])
         for obj in custom:
             schema = schemas[(obj["apiVersion"], obj["kind"])]
             jsonschema.Draft7Validator(schema).validate(obj)

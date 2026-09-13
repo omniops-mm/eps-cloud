@@ -25,7 +25,9 @@ def main():
         raise RuntimeError("Existing Helm tool required")
     with tempfile.TemporaryDirectory(prefix="eps-controller-charts-") as temporary:
         charts = {}
-        for chart, pin in json.loads((PLATFORM / "versions.json").read_text()).items():
+        pins = json.loads((PLATFORM / "versions.json").read_text())
+        for chart in ("cert-manager", "external-secrets"):
+            pin = pins[chart]
             run(
                 [
                     helm,

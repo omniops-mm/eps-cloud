@@ -10,5 +10,21 @@
     "version": "2.10.0",
     "appVersion": "v2.10.0",
     "sha256": "b96e948fff3674638b5d3f9e43886f3796e04739c4b4127929aed2ddac7d1418"
+  },
+  "kube-prometheus-stack": {
+    "repository": "https://prometheus-community.github.io/helm-charts",
+    "version": "90.2.0",
+    "appVersion": "v0.93.1",
+    "sha256": "e2b15d624c5f24170216b1b0ae28b71ed41bb33d012c668f62cff3eb905b5916",
+    "release": "monitoring",
+    "namespace": "monitoring"
+  },
+  "prometheus-postgres-exporter": {
+    "repository": "https://prometheus-community.github.io/helm-charts",
+    "version": "8.2.0",
+    "appVersion": "v0.20.1",
+    "sha256": "132474e152abb076ef85157b95c5dc3d16e29de26605a9d513789a29409a6e79",
+    "release": "postgres-exporter",
+    "namespace": "eps"
   }
 }

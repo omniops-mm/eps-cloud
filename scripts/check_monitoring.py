@@ -12,21 +12,7 @@ import jsonschema
 import yaml
 
 from scripts.check_deploy import ROOT, validate_gitops, validate_objects
-
-
-def reject_unknown_fields(schema: object) -> None:
-    """Close defined objects and normalize equivalent Go/Python regex syntax."""
-    if isinstance(schema, dict):
-        # Python requires global regex flags before anchors; Go accepts either order.
-        if str(schema.get("pattern", "")).startswith("^(?i)"):
-            schema["pattern"] = "(?i)^" + schema["pattern"][5:]
-        if "properties" in schema and not schema.get("x-kubernetes-preserve-unknown-fields"):
-            schema.setdefault("additionalProperties", False)
-        for value in schema.values():
-            reject_unknown_fields(value)
-    elif isinstance(schema, list):
-        for value in schema:
-            reject_unknown_fields(value)
+from scripts.check_platform import reject_unknown_fields
 
 
 def validate_monitoring(objects: list[dict], namespace: str) -> None:

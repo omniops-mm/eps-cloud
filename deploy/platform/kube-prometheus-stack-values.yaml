@@ -1,0 +1,293 @@
+# Installation requires cleared image findings and local compatibility checks.
+# Container resource metrics use kubelet; no host-mounted node exporter is installed.
+fullnameOverride: monitoring
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false
+defaultRules:
+  rules:
+    etcd: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeControllerManager: false
+    kubeProxy: false
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  image:
+    registry: dhi.io
+    repository: prometheus-operator
+    tag: 0.93.1
+    sha: 535ba304416ad42fab2749be00828112259655a48e51ee146f0c26c001e902bd
+  prometheusConfigReloader:
+    image:
+      registry: dhi.io
+      repository: prometheus-config-reloader
+      tag: 0.93.1
+      sha: 8d5d5fd139d10d3c9852c670017981700dbc61820e6b15d18fc5a82af85b1d08
+  admissionWebhooks:
+    patch:
+      enabled: false
+    certManager:
+      enabled: true
+  namespaces:
+    releaseNamespace: true
+    additional:
+    - eps
+    - kube-system
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 192Mi
+  image:
+    registry: dhi.io
+    repository: kube-state-metrics
+    tag: 2.20.0
+    sha: sha256:f8fe24770ef101d8ee6e4026fd07e4b81ac57bd7a21a5fb6b2a02ed8370c4501
+  namespaces: eps
+  collectors:
+  - cronjobs
+  - deployments
+  - horizontalpodautoscalers
+  - jobs
+  - pods
+  - statefulsets
+  - persistentvolumeclaims
+  securityContext:
+    enabled: true
+    runAsGroup: 65532
+    runAsUser: 65532
+    fsGroup: 65532
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+prometheus:
+  prometheusSpec:
+    replicas: 1
+    retention: 3d
+    retentionSize: 2GB
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    enableFeatures:
+    - exemplar-storage
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector:
+      matchLabels:
+        release: monitoring
+    serviceMonitorNamespaceSelector:
+      matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: In
+        values:
+        - eps
+        - monitoring
+        - kube-system
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector:
+      matchLabels:
+        release: monitoring
+    ruleNamespaceSelector:
+      matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: In
+        values:
+        - eps
+        - monitoring
+        - kube-system
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: '1'
+        memory: 1536Mi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+          - ReadWriteOnce
+          resources:
+            requests:
+              storage: 4Gi
+    image:
+      registry: dhi.io
+      repository: prometheus
+      tag: 3.14.0
+      sha: 5700b5e591bde80259e24aceabfb04fcfc099f0190a1a22485a681dc2ef24ffc
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      runAsGroup: 65532
+      fsGroup: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    imagePullSecrets:
+    - name: dhi-pull
+    arbitraryFSAccessThroughSMs:
+      deny: true
+    overrideHonorLabels: true
+    overrideHonorTimestamps: true
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: false
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 192Mi
+    image:
+      registry: dhi.io
+      repository: alertmanager
+      tag: 0.34.0
+      sha: 14fd92ae7feac25da9a61dab66631853764e1ba936790d8010ad2e6a2cc6fb45
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      runAsGroup: 65532
+      fsGroup: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    imagePullSecrets:
+    - name: dhi-pull
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: eps-log
+      group_by:
+      - alertname
+      - namespace
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 1h
+      routes:
+      - matchers:
+        - alertname="Watchdog"
+        receiver: eps-log
+        repeat_interval: 5m
+    receivers:
+    - name: eps-log
+      webhook_configs:
+      - url: http://alert-log.eps.svc.cluster.local:9091/
+        send_resolved: true
+        max_alerts: 100
+        http_config:
+          follow_redirects: false
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: false
+grafana:
+  fullnameOverride: grafana
+  admin:
+    existingSecret: eps-grafana
+    userKey: admin-user
+    passwordKey: admin-password
+  initChownData:
+    enabled: false
+  defaultDashboardsEnabled: false
+  persistence:
+    enabled: true
+    size: 1Gi
+  deploymentStrategy:
+    type: Recreate
+  rbac:
+    create: false
+  sidecar:
+    dashboards:
+      searchNamespace: eps
+      resource: configmap
+      enabled: true
+    datasources:
+      searchNamespace: monitoring
+      resource: configmap
+      uid: prometheus
+      enabled: true
+    image:
+      registry: dhi.io
+      repository: k8s-sidecar
+      tag: 2.11.2
+      sha: 0a2ca719cfe5b928256029ac4ce6ac146b7f6d6dec55b97a2e7a0c19a22f2de3
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 192Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+      seccompProfile:
+        type: RuntimeDefault
+  grafana.ini:
+    analytics:
+      reporting_enabled: false
+      check_for_updates: false
+    users:
+      allow_sign_up: false
+    auth.anonymous:
+      enabled: false
+    security:
+      cookie_samesite: strict
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+  image:
+    registry: dhi.io
+    repository: grafana
+    tag: 13.2.1
+    sha: 0af893bd0b24ab4d07cf10888a1a8ba812d4ae206685e3aeaaf0bf2d7d8757d8
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: false
+  testFramework:
+    enabled: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  serviceAccount:
+    name: grafana
+global:
+  imagePullSecrets:
+  - name: dhi-pull
+nodeExporter:
+  enabled: false

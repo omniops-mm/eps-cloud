@@ -1,0 +1,32 @@
+fullnameOverride: postgres-exporter
+automountServiceAccountToken: false
+config:
+  datasourceSecret:
+    name: eps-exporter
+    key: DATA_SOURCE_NAME
+serviceMonitor:
+  enabled: true
+  labels:
+    release: monitoring
+  interval: 15s
+  namespace: eps
+resources:
+  requests:
+    cpu: 20m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 96Mi
+image:
+  registry: dhi.io
+  repository: postgres-exporter
+  tag: 0.20.1@sha256:bd49526254a7e69ed86a6c2a2e7b91384eb8556e3fc9994d4a46f9a920e63162
+  pullSecrets:
+  - dhi-pull
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault

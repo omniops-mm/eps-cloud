@@ -161,8 +161,8 @@ jobs:
       fail-fast: false
       matrix:
         # Migrations reuse the web image.
-        # Fork PRs do not receive registry credentials; Argo is verified on master pushes.
-        image: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/master' && '["web","worker","nginx","argocd"]' || '["web","worker","nginx"]') }}
+        # Argo rebuilds require an explicit temporary registry-access window.
+        image: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.EPS_BUILD_ARGO == 'true' && '["web","worker","nginx","argocd"]' || '["web","worker","nginx"]') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -340,7 +340,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [web, worker, nginx, argocd]
+        image: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.EPS_BUILD_ARGO == 'true' && '["web","worker","nginx","argocd"]' || '["web","worker","nginx"]') }}
     steps:
       - uses: actions/checkout@v4
         with:

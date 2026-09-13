@@ -57,7 +57,7 @@ The snapshot job has read-only repository permissions and does not create or upd
 
 `Dockerfile.argocd` replaces two pinned Debian libraries in the digest-pinned donor. CI verifies the donor signature, checks every exported runtime path against the original and scans both the image and its complete derived inventory. The derived inventory preserves all donor components; it is not vendor-signed. Transparency-log verification is skipped explicitly. Package hashes and versions are recorded in `argocd-image.json`.
 
-Argo builds run on master pushes and require the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_READ_TOKEN`, using a temporary read-only Docker token. CI removes the registry login after verification, then publishes and signs the checked image in GHCR. After the required run succeeds, revoke the token in Docker and delete its GitHub secret. Subsequent Argo builds require a replacement token. Published images remain available; publication does not establish deployment readiness.
+Argo builds run on master pushes only when the repository variable `EPS_BUILD_ARGO` is `true` and require the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_READ_TOKEN`, using a temporary read-only Docker token. CI removes the registry login after verification, then publishes and signs the checked image in GHCR. After the required run succeeds, revoke the token in Docker and delete its GitHub secret. Delete or disable `EPS_BUILD_ARGO` when revoking the token. Ordinary application CI builds and signs web, worker and nginx without Docker credentials; subsequent Argo rebuilds require a replacement token and explicit opt-in. Published images remain available; publication does not establish deployment readiness.
 
 ## Operator-controlled promotion
 

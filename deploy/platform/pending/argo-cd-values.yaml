@@ -1,9 +1,9 @@
-# BLOCKED: unresolved Argo image findings. Do not install.
+# Pending restricted runtime acceptance and Redis registry access. Do not install.
 createClusterRoles: false
 global:
   image:
-    repository: dhi.io/argocd
-    tag: 3.5.2@sha256:63b043cfc1184ece55d445e03a750fe8e780ea16ae411c2ee1dee2b6fe0f7a77
+    repository: ghcr.io/omniops-mm/eps-cloud/argocd
+    tag: ef73771d65a6ef33cb7846c88d6c58514d54e9f4@sha256:294ac56b2bcc076902e5d6f971f9355061f4d3766111c87b81bd47d1329f1305
   imagePullSecrets:
   - name: dhi-pull
 configs:

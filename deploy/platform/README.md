@@ -77,6 +77,12 @@ The bootstrap checks PostgreSQL major 16 and refuses any existing database witho
 
 Before production: use fresh isolated rehearsal storage, verify version/roles/database access and restart behavior with the exact images, and confirm image pulls work after a pod restart. Local shell tests use simulated PostgreSQL commands and prove control flow only. The Kubernetes database rehearsal below verifies initialization and restart behavior against the pinned image.
 
+## Preloaded images for the private lab
+
+Kubernetes anonymous DHI pulls return an authentication error. Workstation Docker pull success does not establish anonymous node access. The lab can instead import reviewed local image archives using the native [k3s image-import mechanism](https://docs.k3s.io/add-ons/import-images), without transferring Docker credentials.
+
+Export each original digest with `docker image save`; do not filter the export by platform because that changes the index. Import only `linux/amd64` with containerd's `images import --platform linux/amd64 --base-name <original-repository> --digests <archive>`. Confirm the original digest exists before installation and verify archive checksums across transfer. Use `imagePullPolicy: Never` for the preload rehearsal. Missing images then fail locally; archive retention and reimport are prerequisites for rebuilding a node. The existing authenticated installation values remain unchanged.
+
 ## Local Kubernetes registry rehearsal
 
 Run `scripts/rehearse_registry.py` with Python on the Windows workstation after committing and passing CI. It uses the existing k3d/kubectl tools and creates a temporary kubeconfig for `eps-v04-dev`, without changing the default context. It refuses endpoints other than HTTPS 127.0.0.1:6550 and refuses disabled TLS verification.

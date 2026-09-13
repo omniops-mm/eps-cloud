@@ -54,6 +54,9 @@ server:
       cpu: 250m
       memory: 192Mi
 redis:
+  # DHI uses tini; the chart supplies arguments without the executable.
+  extraArgs:
+  - redis-server
   image:
     repository: dhi.io/redis
     tag: 8.6.6@sha256:5e18c5b4d11d55c8788a1bf360cb34fc6a40f9db215812c7ee84e82a778c71f6
@@ -72,4 +75,5 @@ dex:
 notifications:
   enabled: false
 applicationSet:
-  enabled: false
+  replicas: 0
+  automountServiceAccountToken: false

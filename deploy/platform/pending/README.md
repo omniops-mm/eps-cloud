@@ -1,9 +1,7 @@
 # Pending Argo activation
 
-Argo remains outside the installable platform registry. Its pinned vendor image has four fixable HIGH findings. A local PCRE2/SQLite package update passes filesystem and derived-inventory scans, but the candidate is not published or deployed.
+The patched Argo image passed CI build, donor verification, both vulnerability gates, publication and keyless signing in run 34765117259. It is an EPS-derived image, not a vendor-signed release.
 
-The separate [k3s lab exception](../../../docs/lab-security.md) permits the private host; it does not approve the Argo image. KEDA was not selected. Request scaling uses the reviewed Prometheus Adapter and native HPA.
+`python -m scripts.rehearse_argocd` installs only into `eps-v04-dev`. Preload the exact Argo and Redis digests first. The helper uses `imagePullPolicy: Never`, private services, restricted networking and a generated Redis password. It checks workload rollout, Redis authentication and denied EPS Secret/RBAC reads. It retains the installation and performs no application sync.
 
-The prepared Argo configuration restricts management to the EPS namespace, disables anonymous access and unused controllers, and excludes Secret/RBAC API grants from its application roles. Creating workloads still allows consumption of existing Secrets. Redis requires a privately provisioned password Secret.
-
-Image delivery, controller compatibility, effective permission checks, repository access, synchronization, failed-migration blocking and rollback remain unverified. The operator verifies and commits deployment snapshots; Argo never writes to GitHub.
+ApplicationSet requires `replicas: 0`; this chart ignores `enabled: false`. Redis requires `redis-server` as the first argument because its hardened image uses tini. Cloud installation, synchronization, failed-migration blocking and rollback remain open. Repository promotion remains operator-authored.

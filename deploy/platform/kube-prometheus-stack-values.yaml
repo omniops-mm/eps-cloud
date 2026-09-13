@@ -1,5 +1,4 @@
-# Installation requires cleared image findings and local compatibility checks.
-# Container resource metrics use kubelet; no host-mounted node exporter is installed.
+# Grafana uses native file provisioning without a Kubernetes API token.
 fullnameOverride: monitoring
 kubeEtcd:
   enabled: false
@@ -27,14 +26,14 @@ prometheusOperator:
   image:
     registry: dhi.io
     repository: prometheus-operator
-    tag: 0.93.1
-    sha: 535ba304416ad42fab2749be00828112259655a48e51ee146f0c26c001e902bd
+    tag: 0.94.0
+    sha: e94999ab398d631bbf387d1c7d3041811b423e8765df623037f636147bc27d54
   prometheusConfigReloader:
     image:
       registry: dhi.io
       repository: prometheus-config-reloader
-      tag: 0.93.1
-      sha: 8d5d5fd139d10d3c9852c670017981700dbc61820e6b15d18fc5a82af85b1d08
+      tag: 0.94.0
+      sha: 6af63b54bad658b6af89f6596a0bea6c26bacc736dfa04a28de8c811d04626ff
   admissionWebhooks:
     patch:
       enabled: false
@@ -204,31 +203,6 @@ alertmanager:
   ingress:
     enabled: false
 grafana:
-  additionalDataSources:
-  - name: Loki
-    type: loki
-    uid: loki
-    access: proxy
-    url: http://loki.monitoring.svc.cluster.local:3100
-    jsonData:
-      maxLines: 500
-      derivedFields:
-      - name: TraceID
-        matcherRegex: '"trace_id"\s*:\s*"([0-9a-f]{32})"'
-        datasourceUid: tempo
-        url: '$${__value.raw}'
-  - name: Tempo
-    type: tempo
-    uid: tempo
-    access: proxy
-    url: http://tempo.monitoring.svc.cluster.local:3200
-    jsonData:
-      tracesToLogsV2:
-        datasourceUid: loki
-        spanStartTimeShift: -1m
-        spanEndTimeShift: 1m
-        customQuery: true
-        query: '{namespace="eps"} | json | trace_id="$${__span.traceId}"'
   fullnameOverride: grafana
   admin:
     existingSecret: eps-grafana
@@ -246,37 +220,9 @@ grafana:
     create: false
   sidecar:
     dashboards:
-      searchNamespace: eps
-      resource: configmap
-      enabled: true
+      enabled: false
     datasources:
-      searchNamespace: monitoring
-      resource: configmap
-      uid: prometheus
-      exemplarTraceIdDestinations:
-        datasourceUid: tempo
-        traceIdLabelName: trace_id
-      enabled: true
-    image:
-      registry: dhi.io
-      repository: k8s-sidecar
-      tag: 2.11.2
-      sha: 0a2ca719cfe5b928256029ac4ce6ac146b7f6d6dec55b97a2e7a0c19a22f2de3
-    resources:
-      requests:
-        cpu: 10m
-        memory: 64Mi
-      limits:
-        cpu: 100m
-        memory: 192Mi
-    securityContext:
-      allowPrivilegeEscalation: false
-      readOnlyRootFilesystem: true
-      capabilities:
-        drop:
-        - ALL
-      seccompProfile:
-        type: RuntimeDefault
+      enabled: false
   grafana.ini:
     analytics:
       reporting_enabled: false
@@ -314,6 +260,61 @@ grafana:
       type: RuntimeDefault
   serviceAccount:
     name: grafana
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus
+        access: proxy
+        url: http://monitoring-prometheus.monitoring.svc.cluster.local:9090
+        isDefault: true
+        jsonData:
+          httpMethod: POST
+          timeInterval: 15s
+          exemplarTraceIdDestinations:
+          - datasourceUid: tempo
+            name: trace_id
+      - name: Loki
+        type: loki
+        uid: loki
+        access: proxy
+        url: http://loki.monitoring.svc.cluster.local:3100
+        jsonData:
+          maxLines: 500
+          derivedFields:
+          - name: TraceID
+            matcherRegex: '"trace_id"\s*:\s*"([0-9a-f]{32})"'
+            datasourceUid: tempo
+            url: $${__value.raw}
+      - name: Tempo
+        type: tempo
+        uid: tempo
+        access: proxy
+        url: http://tempo.monitoring.svc.cluster.local:3200
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: loki
+            spanStartTimeShift: -1m
+            spanEndTimeShift: 1m
+            customQuery: true
+            query: '{namespace="eps"} | json | trace_id="$${__span.traceId}"'
+  automountServiceAccountToken: false
+  dashboardsConfigMaps:
+    default: eps-grafana-dashboards
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+      - name: default
+        orgId: 1
+        folder: EPS
+        type: file
+        disableDeletion: false
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards/default
 global:
   imagePullSecrets:
   - name: dhi-pull

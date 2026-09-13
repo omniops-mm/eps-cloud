@@ -13,9 +13,9 @@
   },
   "kube-prometheus-stack": {
     "repository": "https://prometheus-community.github.io/helm-charts",
-    "version": "90.2.0",
-    "appVersion": "v0.93.1",
-    "sha256": "e2b15d624c5f24170216b1b0ae28b71ed41bb33d012c668f62cff3eb905b5916",
+    "version": "91.0.0",
+    "appVersion": "v0.94.0",
+    "sha256": "d2f772e396c0f05da23b06bd7211b37a8184ceb97a59a709c9cc339ae5083c84",
     "release": "monitoring",
     "namespace": "monitoring"
   },

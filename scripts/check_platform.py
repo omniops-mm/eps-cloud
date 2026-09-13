@@ -130,32 +130,7 @@ def validate_federation(identities: list[dict], stores: list[dict]) -> None:
 
 
 def validate_monitoring_access() -> None:
-    """Keep dashboard API permissions separate from database credentials."""
-    objects = list(yaml.safe_load_all((PLATFORM / "grafana-dashboard-rbac.yaml").read_text()))
-    if len(objects) != 4:
-        raise ValueError("Expected Grafana roles and bindings in exactly two namespaces")
-    for namespace in ("eps", "monitoring"):
-        role = next(
-            o for o in objects if o["kind"] == "Role" and o["metadata"]["namespace"] == namespace
-        )
-        binding = next(
-            o
-            for o in objects
-            if o["kind"] == "RoleBinding" and o["metadata"]["namespace"] == namespace
-        )
-        if (
-            role["rules"]
-            != [{"apiGroups": [""], "resources": ["configmaps"], "verbs": ["get", "list", "watch"]}]
-            or binding["subjects"]
-            != [{"kind": "ServiceAccount", "name": "grafana", "namespace": "monitoring"}]
-            or binding["roleRef"]
-            != {
-                "apiGroup": "rbac.authorization.k8s.io",
-                "kind": "Role",
-                "name": role["metadata"]["name"],
-            }
-        ):
-            raise ValueError("Grafana API access must be ConfigMap-only in eps and monitoring")
+    """Keep exporter credentials and database access in the application namespace."""
     secrets = list(yaml.safe_load_all((PLATFORM / "external-secrets.yaml").read_text()))
     exporters = [o for o in secrets if o["metadata"]["name"] == "eps-exporter"]
     if len(exporters) != 1 or exporters[0]["metadata"]["namespace"] != "eps":
@@ -211,16 +186,11 @@ def validate_monitoring_platform(objects: list[dict], chart: str) -> None:
             obj["spec"].get("type", "ClusterIP") != "ClusterIP" or obj["spec"].get("externalIPs")
         ):
             raise ValueError("Monitoring Services must stay internal")
-        if kind in {"Role", "ClusterRole"} and "grafana" in name:
-            if kind != "Role" or obj["metadata"].get("namespace") != "monitoring":
-                raise ValueError("Grafana must use namespace-scoped RBAC")
-            for rule in obj["rules"]:
-                if rule.get("resources") != ["configmaps"] or set(rule.get("verbs", [])) - {
-                    "get",
-                    "list",
-                    "watch",
-                }:
-                    raise ValueError("Grafana API access must be ConfigMap-only")
+        if (
+            kind in {"Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding"}
+            and "grafana" in name
+        ):
+            raise ValueError("Grafana must not receive Kubernetes API permissions")
         if kind in {"Prometheus", "Alertmanager"}:
             spec = obj["spec"]
             if not spec.get("image", "").startswith("dhi.io/") or "@sha256:" not in spec["image"]:
@@ -258,6 +228,12 @@ def validate_monitoring_platform(objects: list[dict], chart: str) -> None:
             is not False
         ):
             raise ValueError("Telemetry storage must not mount Kubernetes API tokens")
+        if name == "grafana" and (
+            pod.get("automountServiceAccountToken") is not False
+            or len(pod["containers"]) != 1
+            or pod.get("initContainers")
+        ):
+            raise ValueError("Grafana must use native provisioning without sidecars or API tokens")
         for container in (pod.get("initContainers") or []) + pod["containers"]:
             security = container.get("securityContext", {})
             if not container["image"].startswith("dhi.io/") or "@sha256:" not in container["image"]:
@@ -364,6 +340,19 @@ def validate_telemetry_network(objects: list[dict]) -> None:
             raise ValueError("Telemetry ingress must allow only the intended clients and ports")
 
 
+def dashboard_configmap() -> dict:
+    """Mount the existing dashboard sources without a collector or duplicate JSON."""
+    return {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": "eps-grafana-dashboards", "namespace": "monitoring"},
+        "data": {
+            path.name: path.read_text(encoding="utf-8").replace("__EPS_NAMESPACE__", "eps")
+            for path in sorted((ROOT / "deploy/helm/eps/dashboards").glob("*.json"))
+        },
+    }
+
+
 def main() -> None:
     pins = json.loads((PLATFORM / "versions.json").read_text(encoding="utf-8"))
     identities = list(yaml.safe_load_all((PLATFORM / "eso-identities.yaml").read_text()))
@@ -374,7 +363,7 @@ def main() -> None:
         list(yaml.safe_load_all((PLATFORM / "telemetry-network.yaml").read_text()))
     )
     schemas = {}
-    core = []
+    core = [dashboard_configmap()]
     custom: list[dict] = []
     with tempfile.TemporaryDirectory(prefix="eps-platform-check-") as temporary:
         work = Path(temporary)
@@ -442,7 +431,6 @@ def main() -> None:
             "namespaces.yaml",
             "metadata-policy.yaml",
             "eso-identities.yaml",
-            "grafana-dashboard-rbac.yaml",
             "exporter-networkpolicies.yaml",
             "telemetry-network.yaml",
         ):

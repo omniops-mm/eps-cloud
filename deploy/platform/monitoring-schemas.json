@@ -1,10 +1,10 @@
 {
   "ServiceMonitor": {
-    "url": "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.93.1/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml",
-    "sha256": "7dd4206947c94bc76f71daa07c45a1010a5d697c54fe079f8207b0e82026a26a"
+    "url": "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.94.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml",
+    "sha256": "10a5f90038608d9a2758d5a8700e1be5adbaff5d6355a52fa7b6e8488b71156d"
   },
   "PrometheusRule": {
-    "url": "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.93.1/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml",
-    "sha256": "2d72928f7ceb99d153f2f91d2c2fd68d4b89c4914f2a09e15ac049b2f0316df3"
+    "url": "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.94.0/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml",
+    "sha256": "2f2015458b5f70695efc918e2c5ca063563e1dd4c9b1324a28f7a0367de26e88"
   }
 }

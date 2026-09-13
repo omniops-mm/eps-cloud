@@ -68,7 +68,6 @@ def test_monitoring_access_rejects_expanded_permissions(tmp_path, monkeypatch):
     from scripts import check_platform
 
     files = (
-        "grafana-dashboard-rbac.yaml",
         "external-secrets.yaml",
         "exporter-networkpolicies.yaml",
     )
@@ -85,23 +84,13 @@ def test_monitoring_access_rejects_expanded_permissions(tmp_path, monkeypatch):
     write(original)
     check_platform.validate_monitoring_access()
     changed = deepcopy(original)
-    changed[files[0]][0]["rules"][0]["resources"].append("secrets")
-    write(changed)
-    with pytest.raises(ValueError, match="ConfigMap-only"):
-        check_platform.validate_monitoring_access()
-    changed = deepcopy(original)
-    changed[files[0]][1]["subjects"][0]["namespace"] = "default"
-    write(changed)
-    with pytest.raises(ValueError, match="ConfigMap-only"):
-        check_platform.validate_monitoring_access()
-    changed = deepcopy(original)
-    exporter = next(o for o in changed[files[1]] if o["metadata"]["name"] == "eps-exporter")
+    exporter = next(o for o in changed[files[0]] if o["metadata"]["name"] == "eps-exporter")
     exporter["metadata"]["namespace"] = "monitoring"
     write(changed)
     with pytest.raises(ValueError, match="credentials must stay"):
         check_platform.validate_monitoring_access()
     changed = deepcopy(original)
-    changed[files[2]][1]["spec"]["ingress"][0]["from"][0]["namespaceSelector"] = {}
+    changed[files[1]][1]["spec"]["ingress"][0]["from"][0]["namespaceSelector"] = {}
     write(changed)
     with pytest.raises(ValueError, match="policy scope"):
         check_platform.validate_monitoring_access()
@@ -181,3 +170,17 @@ def test_telemetry_rejects_expanded_access_and_receivers():
     config_object["data"]["tempo.yaml"] = yaml.safe_dump(config)
     with pytest.raises(ValueError, match="OTLP HTTP"):
         validate_telemetry([config_object], "tempo")
+
+
+def test_native_dashboard_configmap_preserves_sources():
+    import json
+
+    from scripts.check_platform import ROOT, dashboard_configmap
+
+    obj = dashboard_configmap()
+    assert obj["metadata"] == {"name": "eps-grafana-dashboards", "namespace": "monitoring"}
+    assert set(obj["data"]) == {"eps-red.json", "eps-resources.json", "eps-jobs.json"}
+    for name, value in obj["data"].items():
+        source = (ROOT / "deploy/helm/eps/dashboards" / name).read_text(encoding="utf-8")
+        assert json.loads(value) == json.loads(source.replace("__EPS_NAMESPACE__", "eps"))
+        assert "__EPS_NAMESPACE__" not in value

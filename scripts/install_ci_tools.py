@@ -5,6 +5,7 @@ import io
 import json
 import os
 import platform
+import sys
 import tarfile
 import tempfile
 import urllib.request
@@ -34,7 +35,9 @@ def main() -> None:
     github_path = Path(os.environ["GITHUB_PATH"])
     pins = json.loads(Path(__file__).with_name("tools.lock.json").read_text(encoding="utf-8"))
     destination = Path(tempfile.mkdtemp(prefix="eps-tools-", dir=os.environ["RUNNER_TEMP"]))
-    for name, pin in pins.items():
+    names = sys.argv[1:] or ["k3d", "kubeconform", "gitleaks", "helm"]
+    for name in names:
+        pin = pins[name]
         if not pin["url"].startswith("https://"):
             raise ValueError("Tool downloads require HTTPS")
         with urllib.request.urlopen(pin["url"], timeout=60) as response:

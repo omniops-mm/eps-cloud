@@ -53,6 +53,12 @@ After all image signing/verification jobs succeed on a master push, CI creates `
 
 The snapshot job has read-only repository permissions and does not create or update `production`. `deployment_ready: false` records the remaining platform-image and live-validation gates; it is a status marker, not an access control. No cloud credentials or secret payloads are included by the generator. Chart source must still pass review and secret checks. Download artifacts only from the intended successful trusted run: running the generator with arbitrary JSON is not signature verification. Promotion must later recheck the source is still current, preserve branch protections, and publish the complete snapshot in one operator-authored commit. Automatic deployment remains disabled.
 
+## Argo image verification
+
+`Dockerfile.argocd` replaces two pinned Debian libraries in the digest-pinned donor. CI verifies the donor signature, checks every exported runtime path against the original and scans both the image and its complete derived inventory. The derived inventory preserves all donor components; it is not vendor-signed. Transparency-log verification is skipped explicitly. Package hashes and versions are recorded in `argocd-image.json`.
+
+Argo builds run on master pushes and require the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_READ_TOKEN`, using a temporary read-only Docker token. CI removes the registry login after verification, then publishes and signs the checked image in GHCR. After the required run succeeds, revoke the token in Docker and delete its GitHub secret. Subsequent Argo builds require a replacement token. Published images remain available; publication does not establish deployment readiness.
+
 ## Operator-controlled promotion
 
 CI never commits or pushes repository changes. After the image and live acceptance gates pass, download the snapshot from one successful master run. Run `python -m scripts.verify_release <snapshot-directory>` from the source checkout. The verifier checks the GitHub run identity, downloads the image digest records directly from that run, reconstructs the expected chart from its exact source commit, compares every deployable file and rejects a superseded source.

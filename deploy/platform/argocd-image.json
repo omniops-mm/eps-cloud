@@ -1,0 +1,16 @@
+{
+  "donor": "dhi.io/argocd@sha256:63b043cfc1184ece55d445e03a750fe8e780ea16ae411c2ee1dee2b6fe0f7a77",
+  "platform_digest": "3ea90ac01203ae9e3d7c048add98190b0e7285842eec94c015a0ed921c51e38a",
+  "packages": {
+    "libpcre2-8-0": {
+      "version": "10.46-1~deb13u2",
+      "path": "usr/lib/x86_64-linux-gnu/libpcre2-8.so.0.14.0",
+      "sha256": "8dde125b341abfdf4a596d2974cd3048e350cbc8d2d77acd54ea044f7815ca77"
+    },
+    "libsqlite3-0": {
+      "version": "3.46.1-7+deb13u2",
+      "path": "usr/lib/x86_64-linux-gnu/libsqlite3.so.0.8.6",
+      "sha256": "317d80bf5d592f98a71e14d2330591d6a339f631f37c5977835af748a1f26715"
+    }
+  }
+}

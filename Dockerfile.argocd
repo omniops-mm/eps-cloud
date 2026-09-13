@@ -1,0 +1,16 @@
+FROM dhi.io/argocd@sha256:63b043cfc1184ece55d445e03a750fe8e780ea16ae411c2ee1dee2b6fe0f7a77 AS original
+FROM debian:trixie-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132 AS patch
+COPY --from=original / /target/
+WORKDIR /packages
+RUN apt-get update \
+    && apt-get download libpcre2-8-0=10.46-1~deb13u2 libsqlite3-0=3.46.1-7+deb13u2 \
+    && dpkg --root=/target --install /packages/*.deb \
+    && dpkg --root=/target --verify libpcre2-8-0 libsqlite3-0 \
+    && for package in libpcre2-8-0 libsqlite3-0; do dpkg-query --admindir=/target/var/lib/dpkg --status "$package" > "/target/var/lib/dpkg/status.d/$package"; done
+FROM scratch
+COPY --from=patch /target/ /
+ENV ARGOCD_USER_ID=999
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+USER 999
+ENTRYPOINT ["/usr/bin/tini", "--"]
+

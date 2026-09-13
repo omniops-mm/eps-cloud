@@ -102,3 +102,13 @@
   register: k3s_encryption
   changed_when: false
   failed_when: "'Encryption Status: Enabled' not in k3s_encryption.stdout"
+
+- name: Verify ingress has no public service or node ports.
+  ansible.builtin.command: /usr/local/bin/k3s kubectl get service traefik -n kube-system -o json
+  register: k3s_ingress
+  changed_when: false
+  until:
+    - (k3s_ingress.stdout | from_json).spec.type == 'ClusterIP'
+    - ((k3s_ingress.stdout | from_json).spec.ports | selectattr('nodePort', 'defined') | list | length) == 0
+  retries: 36
+  delay: 5

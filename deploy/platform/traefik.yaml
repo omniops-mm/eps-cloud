@@ -6,7 +6,8 @@ metadata:
 spec:
   valuesContent: |-
     service:
-      type: ClusterIP
+      spec:
+        type: ClusterIP
     logs:
       access:
         enabled: false

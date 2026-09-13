@@ -77,6 +77,8 @@ def test_host_configuration_regressions_are_rejected():
         with pytest.raises(ValueError, match="Unsafe cluster"):
             validate_host_configs(*changed)
     for ingress_change in (
+        {"service": {"spec": {"type": "LoadBalancer"}}},
+        {"service": {"spec": {"type": "ClusterIP", "externalIPs": ["192.0.2.1"]}}},
         {"service": {"type": "LoadBalancer"}},
         {"service": {"type": "ClusterIP", "externalIPs": ["192.0.2.1"]}},
         {"hostNetwork": True},

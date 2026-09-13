@@ -4,10 +4,19 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: web
-  {{- if .Values.ingress.tls }}
+  {{- if or .Values.ingress.tls .Values.argocd }}
   annotations:
+    {{- if .Values.argocd }}
+    argocd.argoproj.io/sync-wave: "3"
+    {{- if .Values.ingress.private }}
+    # No public load-balancer address; verify private TLS and routing separately.
+    argocd.argoproj.io/ignore-healthcheck: "true"
+    {{- end }}
+    {{- end }}
+    {{- if .Values.ingress.tls }}
     # cert-manager watches for this and keeps a certificate in the tls secret.
     cert-manager.io/cluster-issuer: selfsigned
+    {{- end }}
   {{- end }}
 spec:
   ingressClassName: traefik

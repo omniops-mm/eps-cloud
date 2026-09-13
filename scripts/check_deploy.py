@@ -26,7 +26,9 @@ def validate_host_configs(cluster: dict, server: dict, ingress: dict) -> None:
     if (
         ingress.get("metadata", {}).get("namespace") != "kube-system"
         or ingress.get("metadata", {}).get("name") != "traefik"
-        or service.get("type") != "ClusterIP"
+        or service.get("spec", {}).get("type") != "ClusterIP"
+        or "type" in service
+        or service.get("spec", {}).get("externalIPs")
         or service.get("externalIPs")
         or values.get("hostNetwork")
         or any(port.get("hostPort") for port in values.get("ports", {}).values())
@@ -134,9 +136,14 @@ def validate_gitops(objects: list[dict]) -> None:
         group = obj["apiVersion"].split("/")[0] if "/" in obj["apiVersion"] else ""
         if (group, obj["kind"]) not in allowed:
             raise ValueError("Chart resource exceeds the Argo project allowlist")
-        expected = {"StatefulSet": "0", "Job": "1", "Deployment": "2", "CronJob": "2"}.get(
-            obj["kind"]
-        )
+        expected = {
+            "StatefulSet": "0",
+            "Job": "1",
+            "Deployment": "2",
+            "CronJob": "2",
+            "HorizontalPodAutoscaler": "3",
+            "Ingress": "3",
+        }.get(obj["kind"])
         if (
             expected
             and obj["metadata"].get("annotations", {}).get("argocd.argoproj.io/sync-wave")

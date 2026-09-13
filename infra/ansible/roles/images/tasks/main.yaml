@@ -1,0 +1,84 @@
+---
+- name: Read the local image bundle manifest.
+  ansible.builtin.set_fact:
+    images_records: "{{ lookup('ansible.builtin.file', eps_image_bundle + '/images.json') | from_json }}"
+
+- name: Require pinned images and bounded archive names.
+  ansible.builtin.assert:
+    that:
+      - item.image is match('^(dhi.io/[a-z0-9-]+|ghcr.io/omniops-mm/eps-cloud/argocd)@sha256:[0-9a-f]{64}$')
+      - item.file == item.image.split('@sha256:')[1] + '.tar'
+      - item.sha256 is match('^[0-9a-f]{64}$')
+  loop: "{{ images_records }}"
+  loop_control:
+    label: "{{ item.image }}"
+
+- name: Create the retained image archive directory.
+  ansible.builtin.file:
+    path: /var/lib/eps/images
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Copy image archives without registry credentials.
+  ansible.builtin.copy:
+    src: "{{ eps_image_bundle }}/{{ item.file }}"
+    dest: "/var/lib/eps/images/{{ item.file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ images_records }}"
+  loop_control:
+    label: "{{ item.image }}"
+
+- name: Calculate transferred archive checksums.
+  ansible.builtin.stat:
+    path: "/var/lib/eps/images/{{ item.file }}"
+    checksum_algorithm: sha256
+  loop: "{{ images_records }}"
+  loop_control:
+    label: "{{ item.image }}"
+  register: images_archive_checks
+
+- name: Reject changed image archives before import.
+  ansible.builtin.assert:
+    that:
+      - item.stat.checksum == item.item.sha256
+  loop: "{{ images_archive_checks.results }}"
+  loop_control:
+    label: "{{ item.item.image }}"
+
+- name: Read existing containerd image references.
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, ctr, -n, k8s.io, images, list, -q]
+  changed_when: false
+  register: images_cached
+
+- name: Import reviewed amd64 images with their original digests.
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - ctr
+      - -n
+      - k8s.io
+      - images
+      - import
+      - --platform
+      - linux/amd64
+      - --base-name
+      - "{{ item.image.split('@')[0] }}"
+      - --digests
+      - "/var/lib/eps/images/{{ item.file }}"
+  when: item.image not in images_cached.stdout_lines
+  changed_when: true
+  loop: "{{ images_records }}"
+  loop_control:
+    label: "{{ item.image }}"
+
+- name: Verify every reviewed digest is available locally.
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, ctr, -n, k8s.io, images, list, -q]
+  changed_when: false
+  register: images_imported
+  failed_when: (images_records | map(attribute='image') | difference(images_imported.stdout_lines) | length) > 0

@@ -20,4 +20,8 @@ Offline validation uses init -backend=false, fmt -check, validate and test from 
 
 Run from Linux with infra/ansible/requirements.txt. Adapt the inventory example privately for IAP SSH and verify the host key. The boot script publishes only the public host key through the authenticated Compute serial-output API; interactive serial access remains disabled. Never copy local Google credentials or SSH keys onto the VM. Run syntax/lint checks before configuration; then verify a second run makes no unintended changes.
 
-The live playbook completed successfully; its immediate second run reported 23 successful tasks and zero changes. The node was Ready, secret encryption was enabled, and bundled services used ClusterIP. Platform installation automation, application access and rebuild/restore evidence remain outstanding.
+The live playbook completed successfully; its immediate second run reported 23 successful tasks and zero changes. The node was Ready, secret encryption was enabled, and bundled services used ClusterIP. Ansible verifies that Traefik exposes neither a public service nor NodePorts. Platform installation automation and rebuild/restore evidence remain outstanding.
+
+Workload federation accepts only the two named EPS secret identities and grants access per secret. Supply the same public issuer/JWKS variable file for every later plan, including shutdown. Terraform manages secret containers and IAM only; payloads are provisioned separately and never enter state. Cloud federation passed allowed/denied access checks.
+
+An optional eps_image_bundle imports locally exported, checksum-verified platform archives without registry credentials. The import rerun made zero changes. Cloud Helm installation, Argo synchronization and HTTPS/scrape smoke checks passed; repeatable platform installation, rebuild/restore acceptance and the corrected Git release remain open.

@@ -22,3 +22,5 @@
   roles:
     - hardening
     - k3s
+    - role: images
+      when: eps_image_bundle is defined

@@ -9,6 +9,7 @@ global:
 configs:
   cm:
     application.resourceTrackingMethod: annotation
+    resource.respectRBAC: strict
     users.anonymous.enabled: 'false'
   rbac:
     policy.default: ''

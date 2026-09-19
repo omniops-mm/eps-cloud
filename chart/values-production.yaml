@@ -11,6 +11,6 @@ hpa:
   maxReplicas: 4
 image:
   registry: ghcr.io/omniops-mm/eps-cloud
-  tag: 49e14222b0fac4e5d02381e531eb6d9f1943f7b5
+  tag: 2064540b43498c70059399db18747500d3e40955
   webDigest: sha256:9a9714aeb8170c6d2962d7d539ca05e845ca97f1d7d478ae0cc6fb2e6a775a17
   workerDigest: sha256:933824fd0f3808202864d20c34b2b47a793d916ffd039b75d116fb306a99b735

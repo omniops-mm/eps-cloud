@@ -45,6 +45,7 @@ jobs:
     schedule: "0 3 * * *"
 
 ingress:
+  private: true
   host: eps.localtest.me
   tls: true
 

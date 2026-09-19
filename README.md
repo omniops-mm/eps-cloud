@@ -9,11 +9,11 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 
-**Version [v0.3.0](https://github.com/omniops-mm/eps-cloud/releases/tag/v0.3.0) has been released.** The application runs on a local Kubernetes cluster, created from a committed configuration and installed as a Helm chart, with TLS at the ingress, network policy between the tiers and autoscaling on the web tier. The Compose stack from the earlier versions is unchanged. Version 0.4 adds a production machine and pull-based deployment.
+**Version [v0.5.0](https://github.com/omniops-mm/eps-cloud/tree/v0.5.0).** EPS runs on a private Kubernetes deployment on Google Cloud, with GitOps delivery, metrics, logs and traces, and infrastructure configured through Terraform and Ansible. The local Compose stack remains available for development.
 
 ### Quick links
 
-[Why this exists](#why-this-exists) · [How it works](#how-it-works) · [What the EPS tracks](#what-the-eps-tracks) · [Architecture](#architecture) · [The data model](#the-data-model) · [Observability](#observability) · [Kubernetes](#kubernetes) · [Roadmap](#roadmap) · [Running the application](#running-the-application)
+[Why this exists](#why-this-exists) · [How it works](#how-it-works) · [What the EPS tracks](#what-the-eps-tracks) · [Architecture](#architecture) · [The data model](#the-data-model) · [Kubernetes](#kubernetes) · [Observability](#observability) · [CI/CD and GitOps](#cicd-and-gitops) · [Security](#security) · [Cloud infrastructure](#cloud-infrastructure) · [Running the application](#running-the-application) · [Roadmap](#roadmap)
 
 ---
 
@@ -101,18 +101,20 @@ The weather shown on the dashboard is retrieved from [BrightSky](https://brights
 
 ## Architecture
 
+The diagram below shows the local Compose deployment and the application's four main components. On Kubernetes, Traefik handles incoming HTTP traffic and CronJobs schedule the worker commands; the application and database responsibilities stay the same.
+
 The application runs as four containers, each responsible for a single concern. Version 0.2 added the monitoring services alongside them, which are described under [Observability](#observability); this section covers the application itself.
 
 <p align="center">
   <img src="docs/img/topology.svg" alt="A browser reaches nginx on port 80. nginx is the only container published outside the private network and proxies to the web container on port 8000. A separate worker container takes no inbound traffic. Both web and worker talk to Postgres, which keeps its files on a named volume.">
 </p>
 
-- **nginx** is the only container reachable from outside the private network. It serves the static files and passes every other request inward. When the application runs on Kubernetes, this container's role passes to the ingress controller, which also terminates TLS.
+- **nginx** accepts browser requests through a loopback port on the host. It serves static files and forwards application requests to web. On Kubernetes, the ingress controller routes requests and terminates TLS.
 - **web** is the application itself. It runs Flask under gunicorn and renders every page on the server through Jinja2 templates. HTMX provides the interactive behaviour, which removes the need for a separate frontend application.
 - **worker** executes the scheduled jobs in a process of its own rather than inside a web request. It retrieves the weather each morning and trims the audit log each night. Each job can also be invoked individually by name from the command line, which is what an external scheduler would call. No traffic is directed to the worker.
 - **Postgres** stores the data and is accessed through SQLAlchemy, with every schema change applied as a versioned Alembic migration. Its files are held on a named volume so that the data outlives the container.
 
-Every container shares one private network, and nginx is the only service reachable from other machines. The database and the monitoring interfaces bind to the local machine only, for use during development.
+The containers share a private network. Published application, database and monitoring ports bind to the local machine for development.
 
 A fifth service, `migrate`, applies the migrations and then exits. It reuses the web image rather than requiring another one to be built, and neither web nor worker is permitted to start until it has exited successfully. Schema changes are given a dedicated short-lived process because exactly one process should apply them regardless of how many web replicas are running, and because a migration that fails should leave a stack that refuses to start rather than one that starts and then serves errors against an incomplete schema.
 
@@ -140,197 +142,220 @@ The application is single-user throughout. Multi-user support is not a concern f
 
 ---
 
-## Observability
-
-Version 0.2 adds monitoring to the stack. Each service publishes its current numbers, request counts, durations, job timestamps, at an HTTP endpoint, and Prometheus reads every endpoint on a fifteen-second interval and stores the history. That collection step is called scraping, and it means the services never send anything anywhere; they only answer when asked. Grafana presents the stored history, Alertmanager delivers the alerts, and all of it runs on the same private network as the application, unreachable from outside.
-
-Every dashboard, alert rule and datasource is a file in this repository and is provisioned automatically when the stack starts. A fresh clone comes up with three dashboards and three alert rules in place without any manual configuration. Grafana treats provisioned dashboards as read-only, so a change to a dashboard is a change to a file in the repository rather than something clicked together and lost. The same files are validated in CI on every push.
-
-The application reports more than request counts and latencies. The worker publishes when each scheduled job last succeeded, how often each one runs and how long each takes. The application also measures the time taken to rebuild derived state, how often habits are marked, and whether the weather service responds. These exist because a service can answer every request correctly while its background work has silently stopped.
-
-Three rules alert on situations that require a person: the web application has been unreachable for two minutes, a scheduled job has gone a full day without succeeding, and a sustained share of requests is failing. Notifications are delivered to a webhook receiver that writes every alert to its log, which is how the pipeline is verified without any external service.
-
-The application serves a single user, so the traffic in the graphs below is produced by [a script in this repository](scripts/traffic.py). It sends a weighted mix of page views, habit ticks and the occasional wrong URL through the same nginx entrypoint a browser uses, with randomised gaps between requests. Once the stack had run under that traffic, each alert rule was made to fire once against the running system: the web container was stopped until the unreachable-application rule fired, and the database was stopped under continuing traffic until the error-ratio rule fired. The graphs below cover the second of those tests.
-
-<p align="center">
-  <img src="docs/img/grafana-red.png" alt="The RED dashboard: request rate by route, requests by status code, the 5xx error ratio, and p95/p99 latency. During the deliberate outage the error ratio jumps from zero to near 100% and crosses the red threshold line, and latency rises to the five-second timeout ceiling.">
-</p>
-
-The first dashboard answers three questions about the web application: how much traffic arrives, how much of it fails, and how long requests take. Rate, errors and duration are the standard trio for any service that answers requests, and one screen holding all three is what makes an incident readable at a glance. Duration is read at the 95th and 99th percentile rather than as an average, meaning the time that the slowest five percent and one percent of requests exceed. An average hides exactly the slow requests a user would complain about, which is why it does not appear. The outage is visible in all four panels at once: requests keep arriving, the failure share jumps to nearly all of them and crosses the red line the alert fires on, and latency climbs to the database connection timeout, since every failing request spends the full timeout finding out the database is gone.
-
-<p align="center">
-  <img src="docs/img/grafana-resources.png" alt="The resources dashboard: CPU and memory per container, and three Postgres panels showing connections, commits and rollbacks, and the cache hit ratio. The database panels go dark during the outage because the exporter had nothing to report.">
-</p>
-
-The second dashboard covers what the machines underneath are doing: processor time and memory for every container, and the health of the database, its open connections, its commit and rollback rates, and how often reads are served from memory rather than disk. The request dashboard shows symptoms and this one shows causes, which is why they are separate pages. The same outage appears here as an absence: the database panels simply stop, because the exporter had nothing left to ask.
-
-<p align="center">
-  <img src="docs/img/grafana-worker.png" alt="The worker dashboard: time since each scheduled job last succeeded, the share of requests answered under 500 milliseconds across seven days, job runs and durations, and the application's own measurements of habit ticks, recompute time and weather fetches.">
-</p>
-
-The third dashboard watches the work that happens outside any request. The first panel is the one that matters most: how long ago each scheduled job last succeeded. The line climbs steadily and falls back to zero each time a job completes, and a line that only climbs is a job that has silently stopped, which is exactly what the staleness alert watches for. Beside it, a single figure states the share of requests answered within half a second over the past seven days. The remaining panels count job runs and durations, and the application's own activity: habits marked, recompute time, and weather fetches.
-
-<div align="right"><a href="#top">back to top</a></div>
-
----
-
 ## Kubernetes
 
-Version 0.3 runs the application on a local Kubernetes cluster. The images, the schema and the pages are unchanged from the Compose stack. k3d creates the cluster from `deploy/k3d.yaml`: one node running k3s v1.36 inside a Docker container, host ports 80 and 443 mapped to the cluster's load balancer, and the bundled Traefik disabled because ingress-nginx is installed instead. k3s is the distribution planned for the production machine at version 0.4.
-
-On the cluster the application consists of the following objects:
-
-- Postgres runs as a StatefulSet with one replica. Its volume is provisioned by local-path and is re-attached to the replacement pod when the pod is deleted.
-- The web application runs as a Deployment behind a ClusterIP Service. An init container runs `alembic upgrade head` before the application container starts. The liveness probe calls `/healthz` and the readiness probe calls `/readyz`; a pod that fails readiness is removed from the Service endpoints and is not restarted.
-- The jobs `refresh-weather` and `cleanup-audit-log` run as CronJobs at 06:00 and 03:00 Europe/Berlin, each running `python -m worker.jobs <name>` in the worker image. The scheduler process from the Compose stack is not deployed. The fetch times on the settings page apply to the Compose deployment only.
-- ingress-nginx routes the host eps.localtest.me to the web Service. eps.localtest.me is a public DNS name that resolves to 127.0.0.1.
-- cert-manager issues the certificate for that host from a self-signed ClusterIssuer and renews it. Browsers warn on self-signed certificates. Nothing in this project is exposed to the internet, so no public authority can validate the name.
-- NetworkPolicies deny all inbound traffic in the namespace by default. Three rules open the paths in use: the database accepts port 5432 from the web and job pods, the web pods accept port 8000 from the ingress-nginx namespace, and the job pods accept nothing.
-- A HorizontalPodAutoscaler adds and removes web replicas with CPU load. Its bounds and target are values in the chart.
+EPS runs on k3s with a Helm chart for the application workloads. Argo CD deploys the chart from Git. Local development uses k3d with the same chart and separate ingress, image and storage settings.
 
 <p align="center">
-  <img src="docs/img/k8s-https.png" alt="The dashboard served at https://eps.localtest.me, with the browser's certificate warning acknowledged and the padlock struck through, because the certificate is self-signed.">
+  <img src="docs/img/v05/kubernetes.svg" alt="An operator connects through a private tunnel to Traefik. Traefik routes HTTPS to the web Deployment. Web pods and CronJobs connect to PostgreSQL, backed by a persistent volume. Platform controllers handle certificates, secrets and application sync.">
 </p>
 
-The dashboard above is served through the ingress at https://eps.localtest.me. The marker on the address bar is the browser's response to the self-signed certificate; the connection itself is encrypted with the certificate cert-manager issued.
+### Workloads and traffic
 
-`deploy/raw-manifests/` holds these objects as plain files, one kind per file. `deploy/helm/eps` templates the same objects; the image tag, the secret name, the job list, the resources, the ingress host and the autoscaler bounds are values. The chart does not create the Secret. It is created once with kubectl, and the exact command is in the header of `10-secret.yaml.example`.
+The web Deployment runs Flask and gunicorn behind a ClusterIP Service. Traefik terminates HTTPS and forwards requests to ready web pods. The readiness probe checks `/readyz`, including the database connection. Pods that are still starting or cannot reach the database are removed from Service endpoints. The liveness probe checks `/healthz` and restarts unresponsive containers.
 
-`deploy/k6/load.js` sends ramped traffic through the ingress to the dashboard route, and fails the run if the error rate or the 95th-percentile latency crosses its thresholds. The autoscaler adds web replicas under the ramp and removes them after it.
+PostgreSQL runs as a StatefulSet with a persistent volume claim on the node's retained disk. Replacing a database pod preserves its files. CronJobs run the weather refresh and audit-log cleanup tasks. Their schedules and timezone are chart settings; Compose uses a long-running scheduler for these tasks.
 
-<p align="center">
-  <img src="docs/img/k8s-cluster.png" alt="Terminal output of kubectl get all across all namespaces: the database and web pods in the eps namespace, the cert-manager and ingress-nginx components, the ingress controller's LoadBalancer service, the autoscaler holding two replicas, and the two CronJobs with their Berlin schedules.">
-</p>
+GitOps deployments run a migration Job before updating the web Deployment and autoscaler. A failed migration stops that sync before the web rollout. Direct Helm installations can run migrations in an init container. Both paths use a database advisory lock to serialize migrations.
 
-The output above is `kubectl get all -A` on the running cluster: the application pods in the eps namespace, the cert-manager and ingress-nginx components in their own namespaces, the ingress controller's LoadBalancer service, the autoscaler holding two replicas at idle, and the two CronJobs with their schedules.
+### Autoscaling
 
-Bringing the cluster up from a fresh clone:
+HPA scales the web Deployment from CPU usage. The chart also supports request-rate scaling: Prometheus records requests per pod, Prometheus Adapter exposes that rate through the custom metrics API, and HPA compares it with the configured target. Replica bounds and stabilization windows control how far and how quickly the Deployment scales.
 
-```bash
-k3d cluster create --config deploy/k3d.yaml
-
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm repo add jetstack https://charts.jetstack.io
-helm install ingress-nginx ingress-nginx/ingress-nginx --version 4.15.1 --namespace ingress-nginx --create-namespace
-helm install cert-manager jetstack/cert-manager --version v1.21.1 --namespace cert-manager --create-namespace --set crds.enabled=true
-
-kubectl apply -f deploy/raw-manifests/00-namespace.yaml -f deploy/cluster-issuer.yaml
-# create the secret next; the exact command is in deploy/raw-manifests/10-secret.yaml.example
-helm install eps deploy/helm/eps -n eps
-```
-
-The dashboard is then served at https://eps.localtest.me. The Compose stack and the cluster both claim port 80, so one of them runs at a time. Removing everything is `k3d cluster delete eps`, which also deletes the cluster's data.
+The [Helm chart](deploy/helm/eps) contains the workload definitions. [Deployment instructions](deploy/README.md) cover local and cloud settings.
 
 <div align="right"><a href="#top">back to top</a></div>
 
 ---
 
-## Roadmap
+## Observability
 
-Each version adds one substantial piece of infrastructure. The application itself changes very little between them, which is deliberate. The objective is a small application deployed thoroughly rather than a large one deployed poorly.
+Prometheus stores metrics, Loki stores logs, and Tempo stores traces. Grafana queries all three and links request measurements to their logs and spans.
 
 <p align="center">
-  <img src="docs/img/roadmap.svg" alt="Seven versions on a track that snakes over two rows. v0.1, the four containers under Compose with CI, v0.2, Prometheus and Grafana over the running stack, and v0.3, the stack on Kubernetes, are done. v0.4 adds pull-based deployment with ArgoCD and a private production machine and is next. v0.5 builds that machine from code with Terraform and Ansible, v0.6 moves the network and the database onto managed cloud services, and v1.0 swaps the cluster for managed Kubernetes.">
+  <img src="docs/img/v05/observability.svg" alt="Metrics pass through Prometheus scrape configuration, container logs through Alloy to Loki, and request spans directly over OTLP to Tempo. Grafana queries all three stores. Each store uses persistent storage.">
 </p>
 
-<!-- Written as HTML rather than a pipe table so the cells can carry valign="middle".
-     Without it the bullet lists sit at the top of each row and leave dead space under them. -->
-<table>
-<thead>
-<tr><th>Version</th><th>What it adds</th><th>Stack</th><th>Status</th></tr>
-</thead>
-<tbody>
-<tr>
-<td valign="middle"><b>v0.1</b></td>
-<td valign="middle"><ul><li>Four containers on a private network, with healthchecks and a named volume.</li><li>Schema changes applied as versioned migrations from the first commit.</li><li>Every push linted, type checked, tested, built and scanned.</li></ul></td>
-<td valign="middle">Docker Compose, Alembic, GitHub Actions, ruff, mypy, pytest, gitleaks, Trivy, GHCR</td>
-<td valign="middle"><b>Done</b></td>
-</tr>
-<tr>
-<td valign="middle"><b>v0.2</b></td>
-<td valign="middle"><ul><li>Prometheus scraping the application, the worker, the database and the containers.</li><li>Grafana dashboards and alert rules stored in the repository, so a fresh <code>compose up</code> rebuilds them.</li><li>Alert rules covering an unreachable application, failing requests, and scheduled jobs that stop running.</li></ul></td>
-<td valign="middle">Prometheus, Grafana, Alertmanager, postgres_exporter, cAdvisor</td>
-<td valign="middle"><b>Done</b></td>
-</tr>
-<tr>
-<td valign="middle"><b>v0.3</b></td>
-<td valign="middle"><ul><li>The application expressed as Kubernetes workloads, as plain manifests and as a Helm chart.</li><li>The worker's jobs turned into CronJobs, network policy between the tiers, and TLS at the ingress.</li><li>A load test that drives the autoscaler.</li></ul></td>
-<td valign="middle">k3d, Helm, NetworkPolicies, probes, HPA, ingress-nginx, cert-manager, kubeconform, k6</td>
-<td valign="middle"><b>Done</b></td>
-</tr>
-<tr>
-<td valign="middle"><b>v0.4</b></td>
-<td valign="middle"><ul><li>A private virtual machine as the production environment, with the local cluster kept for development.</li><li>Pull-based deployment: the cluster pulls its state from git, and CI holds no credentials for it.</li><li>Monitoring and log aggregation moved onto the cluster, joined by request tracing. Images signed and shipped with a software bill of materials.</li><li>Application secrets pulled from a managed secret store instead of living in the cluster.</li></ul></td>
-<td valign="middle">k3s, ArgoCD, kube-prometheus-stack, Loki, Tempo, OpenTelemetry, External Secrets, Secret Manager, cosign, Pod Security Admission</td>
-<td valign="middle"><b>Next</b></td>
-</tr>
-<tr>
-<td valign="middle"><b>v0.5</b></td>
-<td valign="middle"><ul><li>The production machine created by Terraform and configured and hardened by Ansible.</li><li>The machine destroyed and rebuilt from the repository, to prove nothing on it was set up by hand.</li></ul></td>
-<td valign="middle">Terraform, Google Compute Engine, Ansible, Ansible Vault</td>
-<td valign="middle">Planned</td>
-</tr>
-<tr>
-<td valign="middle"><b>v0.6</b></td>
-<td valign="middle"><ul><li>A network built by hand rather than taken from the default, with the production machine moved off the public internet.</li><li>The database moved to a managed service, and deploys that authenticate without stored credentials.</li><li>Spending controls that enforce rather than alert, with the managed pieces brought up for each working session and torn down after.</li></ul></td>
-<td valign="middle">Terraform, VPC, Cloud NAT, Cloud SQL, IAM, Workload Identity Federation, GitHub Actions OIDC, tfsec, Budgets, Infracost</td>
-<td valign="middle">Planned</td>
-</tr>
-<tr>
-<td valign="middle"><b>v1.0</b></td>
-<td valign="middle"><ul><li>The cluster swapped for managed Kubernetes behind a cloud load balancer.</li><li>Pods with keyless access to cloud services, and secrets pulled from the managed store through workload identity.</li></ul></td>
-<td valign="middle">GKE, Cloud Load Balancing, Workload Identity, External Secrets, Secret Manager</td>
-<td valign="middle">Planned</td>
-</tr>
-</tbody>
-</table>
+### Metrics and dashboards
 
-### Security, Observability, CI/CD
+The application exposes request counters and duration histograms at `/metrics`. Labels use route templates, methods and status codes. User-supplied dates and path values do not create new time series. ServiceMonitor resources select the endpoints Prometheus scrapes.
 
-Security, observability and the setting up of CI/CD pipelines are all things that I wanted to implement into this project. They are, however, not things that one builds in a particular version and is then done with. They are fundamental practices that exist throughout the entire development process, and thus need to be applied at every stage.
+The PostgreSQL exporter reports database metrics, kube-state-metrics reports workload state, and the blackbox exporter probes the private HTTPS readiness endpoint. The RED dashboard displays request rate, errors and latency. Separate dashboards display resource use, database activity and CronJob status. CronJob completion metrics come from Kubernetes state and remain available after job pods exit.
 
-| Version | CI/CD | Security | Observability |
-| --- | --- | --- | --- |
-| **v0.1** | lint, type check, test, build, scan, publish by commit SHA | gitleaks, non-root images, pinned bases, Trivy, secrets kept out of git | JSON logs, `/metrics`, `/healthz`, `/readyz` |
-| **v0.2** | dashboards and alert rules provisioned from the repository, monitoring configs validated in CI | metrics endpoint hidden at the proxy, read-only monitoring role for the database | Prometheus, Grafana, Alertmanager |
-| **v0.3** | the chart linted and every manifest schema-validated in CI | NetworkPolicies, TLS at the ingress, plain Secrets named as the weak link | k6 load test driving the autoscaler |
-| **v0.4** | pull-based CD: the cluster syncs itself from git | image signing, SBOM, Pod Security Admission, secrets from a managed store | kube-prometheus-stack, Loki, Tempo tracing, synthetic probes |
-| **v0.5** | the playbook proven idempotent, ansible-lint in CI | host hardening: ssh lockdown, firewall, unattended upgrades, Vault | database backups on a timer, with the restore rehearsed |
-| **v0.6** | deploys authenticate through OIDC, no long-lived keys | tfsec, least-privilege IAM | Cloud Monitoring for the managed pieces |
-| **v1.0** | GitOps against GKE | Workload Identity, External Secrets | the same stack carried onto GKE |
+Dashboard JSON, datasource settings and alert rules are stored in Git. Ansible installs the monitoring stack and dashboard ConfigMap. The application chart installs its scrape targets and alert rules.
 
-One piece of deliberate sequencing is worth naming: the structured logs and the metrics endpoint went into the application at version 0.1, before anything existed to read them. Telemetry only accumulates from the moment it is emitted, so the application was instrumented first and the dashboards come second.
+### Logs and traces
+
+Web and job containers emit structured JSON logs. Alloy reads selected pod logs through the Kubernetes API and adds namespace, pod, container and application labels before forwarding them to Loki.
+
+OpenTelemetry instruments Flask requests and SQLAlchemy operations. The application batches spans and exports them directly to Tempo over OTLP/HTTP. Request logs include a trace ID. Sampled request metrics include an exemplar linked to that trace.
+
+<p align="center">
+  <img src="docs/img/v05/telemetry-workflows.svg" alt="In Grafana, a metric exemplar links to a Tempo trace. The trace ID connects request and database spans with matching Loki log events.">
+</p>
+
+Grafana uses the trace ID to open a trace from a log or metric exemplar. Trace-to-log queries retrieve events around the selected span. This connects a slow request with its database operations and application logs.
+
+### Alerts
+
+Prometheus rules detect unavailable web targets, sustained HTTP errors, stale jobs and missing CronJobs. Alertmanager groups notifications and sends firing and resolved updates to an internal webhook receiver. The receiver records each delivery in its log.
+
+<p align="center">
+  <img src="docs/img/v05/alerts.svg" alt="Prometheus rules send alerts to Alertmanager, which groups them and sends webhook notifications to the internal receiver.">
+</p>
+
+### Storage
+
+Prometheus, Loki and Tempo use persistent volumes on the retained node disk. Their Helm values set storage limits and retention periods. Grafana has its own persistent volume for application state, while datasource and dashboard definitions are provisioned from Git.
+
+Configuration is in [deploy/platform](deploy/platform) and [the dashboard directory](deploy/helm/eps/dashboards). The [Compose monitoring stack](observability) supports local development.
 
 <div align="right"><a href="#top">back to top</a></div>
 
 ---
+
+## CI/CD and GitOps
+
+The repository has two branches with separate roles. `master` contains application code, tests and infrastructure configuration. `production` contains the deployment chart and release metadata, with application images pinned by digest. GitHub Actions builds the release artifacts. Argo CD reads the deployment branch and synchronizes the application on Kubernetes.
+
+<p align="center">
+  <img src="docs/img/v05/delivery.svg" alt="A push to master triggers CI and a release snapshot for review and promotion to production. Below, Argo CD reads production and reconciles workloads on GCP. GHCR supplies verified images through a separate import step.">
+</p>
+
+### Continuous integration
+
+Local pre-commit hooks run gitleaks and Ruff. GitHub Actions runs linting, formatting, type checks and unit tests. PostgreSQL migration tests apply the schema, compare it with the models, and exercise downgrade, seed and migration-lock behavior.
+
+Deployment checks validate the Helm chart and rendered manifests, monitoring rules, Terraform and Ansible. Image jobs run after these checks pass. CI builds and scans each image, publishes it to GHCR, then signs and verifies its digest. The workflow packages the chart and exact image references into a release snapshot.
+
+### Release promotion
+
+The operator reviews the snapshot and deployment diff, then commits the approved snapshot to `production`. Release metadata identifies the source revision and CI run. The application chart references immutable image digests, so the selected images do not change when a registry tag moves.
+
+The cloud setup imports verified images into the node. This image-transfer step is separate from Argo's application synchronization. The CI runner publishes artifacts without cluster administrator credentials.
+
+### GitOps reconciliation
+
+Argo CD renders `production:chart/` and compares it with resources read from the Kubernetes API. A difference marks the application out of sync. An operator starts synchronization; Argo applies the migration Job, web Deployment and remaining resources in their configured order, then reports resource health.
+
+Argo's AppProject restricts the destination namespace and permitted resource types. Ansible manages platform controllers and secret delivery separately. HPA manages the web replica count, and Argo ignores that field when checking for drift.
+
+The implementation is in [ci.yml](.github/workflows/ci.yml). The [deployment guide](deploy/README.md) covers snapshot promotion and Argo configuration.
+
+<div align="right"><a href="#top">back to top</a></div>
+
+---
+
+## Security
+
+### Source and build artifacts
+
+Gitleaks checks for credentials before commit. CI scans built images with Trivy and blocks publication on fixable HIGH or CRITICAL findings. The workflow retains vulnerability reports and software inventories. Cosign signs published digests using the workflow's identity, and verification checks the expected repository and workflow before images are imported.
+
+Private inventories, Terraform state, secret payloads and access files stay outside the repository. Terraform creates Secret Manager containers and IAM grants; secret versions are supplied separately to keep their values out of Terraform state.
+
+### Deployment permissions
+
+Release promotion and cluster synchronization are separate operator actions. Argo can deploy the allowed application resource types into the EPS namespace. Its AppProject excludes Secret and RBAC management, which prevents the application chart from changing those permissions through Argo.
+
+Application pods run as non-root users with restricted security contexts. Workloads use scoped service accounts and RBAC. NetworkPolicies select permitted sources and destinations for database access, ingress and telemetry.
+
+<p align="center">
+  <img src="docs/img/v05/security.svg" alt="Selected NetworkPolicy paths: web and job pods reach PostgreSQL, Prometheus scrapes web metrics, and web pods export spans to Tempo. Workload and namespace selectors restrict these connections.">
+</p>
+
+The chart defines these application traffic rules. Platform policies permit the required DNS, controller and monitoring traffic and restrict access to the cloud metadata service. The diagram shows selected connections; the manifests define the complete rule set.
+
+### Host and ingress
+
+The VPC firewall permits inbound SSH through IAP. IAM and OS Login authenticate the operator, and the SSH configuration disables password and root login. Ansible verifies the pinned k3s binary before installation. The host uses Shielded VM protections and a service account with no direct project role grants.
+
+Application and monitoring Services remain internal to the cluster. IAP and network access controls protect the single-user application. Traefik terminates HTTPS using a private certificate from cert-manager. Access uses a loopback-bound tunnel with CA and hostname verification. The pinned runtime and its update conditions are documented in the [runtime gate](docs/lab-security.md).
+
+### Workload credentials
+
+External Secrets uses workload identity federation to exchange a Kubernetes service-account token for Google access. Federation checks the issuer, audience and service-account identity. IAM grants read access per secret, and namespace-scoped controllers write the corresponding Kubernetes Secrets.
+
+<p align="center">
+  <img src="docs/img/v05/secrets.svg" alt="A Kubernetes service-account identity obtains access through federation. Per-secret IAM grants control reads from Secret Manager. External Secrets refreshes encrypted Kubernetes Secrets for the assigned workloads.">
+</p>
+
+k3s encrypts Secrets at rest. The rotation procedure updates the external values, refreshes workload credentials, and checks that the previous database password and signed session are rejected. Imported images keep registry credentials out of application pods.
+
+### Telemetry
+
+Log processing redacts credential fields before export. Request records use bounded metadata, and tracing excludes sensitive request fields. Prometheus labels use route templates to limit cardinality and avoid storing user-supplied path values. Collection is limited to selected workloads, and the telemetry stores use internal Services.
+
+<div align="right"><a href="#top">back to top</a></div>
+
+---
+
+## Cloud infrastructure
+
+Terraform provisions the cloud resources. Ansible configures the host and Kubernetes platform. Argo CD deploys the application.
+
+<p align="center">
+  <img src="docs/img/v05/cloud.svg" alt="An IAP connection reaches the k3s host in a dedicated VPC. A retained disk stores cluster data. Secret Manager supplies credentials through federation, and GCS stores Terraform state separately.">
+</p>
+
+### Compute, storage and access
+
+The k3s host runs inside a dedicated VPC. Its retained disk stores cluster state and local-path volumes for PostgreSQL and telemetry. Stopping the host preserves that data. An authenticated IAP tunnel provides operator access; the external address supports outbound downloads under the firewall's egress rules.
+
+Secret Manager stores workload credentials. A private GCS backend stores Terraform state separately from the host. Ansible installs a shutdown timer to limit the duration of attended sessions.
+
+### Terraform, Ansible and idempotence
+
+Terraform compares the declared resources with remote state and the provider's current values, then produces a plan. Ansible configures packages, SSH, k3s, image imports and platform charts on the provisioned host. Each tool manages a separate part of the deployment.
+
+<p align="center">
+  <img src="docs/img/v05/idempotence.svg" alt="Terraform plans cloud-resource changes, Ansible checks and applies host and platform configuration, and Argo CD compares Git with the Kubernetes API before application sync.">
+</p>
+
+Repeated runs with unchanged inputs should leave the configuration unchanged. The Ansible platform role checks image archive hashes, installed chart versions and values, and server-side manifest differences. It skips matching resources and upgrades charts only when their inputs change. Argo compares application resources with the deployment branch and applies differences during sync.
+
+The [infrastructure guide](infra/README.md) covers provisioning and configuration. Private inventory and federation inputs stay outside the repository.
+
+### Database recovery
+
+The operator exports PostgreSQL to an off-VM archive and records its checksum. A restore into an isolated namespace and volume checks the schema, table counts and row checksums against the source. Credential and cache table schemas are included; their payloads are excluded.
+
+<p align="center">
+  <img src="docs/img/v05/recovery.svg" alt="PostgreSQL is exported to an off-VM archive and restored into an isolated namespace and persistent volume for validation.">
+</p>
+
+The retained disk preserves database and telemetry files across host restarts. After maintenance, catch-up Jobs can run the scheduled tasks before their next CronJob interval.
+
+<div align="right"><a href="#top">back to top</a></div>
+
+---
+
 
 ## Running the application
 
-```bash
+The Compose deployment provides the local application and its monitoring stack:
+
+```powershell
 git clone https://github.com/omniops-mm/eps-cloud.git
 cd eps-cloud
-cp .env.example .env      # then fill in the values it asks for
+Copy-Item .env.example .env
+# Fill in the values in .env, then start the stack.
 docker compose up
 ```
 
-The first run builds the images, applies the migrations and serves the dashboard on port 80. The system starts empty. Running the application on a local Kubernetes cluster instead is described under [Kubernetes](#kubernetes).
+The first run builds the images, applies migrations and serves the dashboard on port 80. The database starts empty. To load roughly two months of example history:
 
-An example database can be loaded instead, for anyone who would rather see the application with data already in it:
-
-```bash
+```powershell
 docker compose run --rm web python seed.py
 ```
 
-This populates the database with roughly two months of example history. It can be run repeatedly, and its data can be deleted safely.
+To stop the local stack while retaining its database volume:
 
-Removing the application is one command, since nothing is installed outside of Docker:
-
-```bash
-docker compose down -v    # stops and removes the containers, the network and the database volume
+```powershell
+docker compose down
 ```
 
-Adding `--rmi all` removes the built images as well, which returns the machine to the state it was in before the clone.
+For Kubernetes, follow [the deployment guide](deploy/README.md). Cloud provisioning and configuration are described in [the infrastructure guide](infra/README.md), including the runtime gate and the private inputs required for the lab.
 
 <div align="right"><a href="#top">back to top</a></div>
 
@@ -341,5 +366,22 @@ Adding `--rmi all` removes the built images as well, which returns the machine t
 MIT, see [LICENSE](LICENSE).
 
 The Space Grotesk typeface is not covered by that licence. It is bundled in `app/static/fonts/` and embedded in the diagrams under `docs/img/`, and is licensed separately under the SIL Open Font License 1.1. Its copyright notice and licence text are in [app/static/fonts/OFL.txt](app/static/fonts/OFL.txt).
+
+<div align="right"><a href="#top">back to top</a></div>
+
+---
+
+## Roadmap
+
+The next versions add managed database, networking and Kubernetes services.
+
+<p align="center">
+  <img src="docs/img/v05/roadmap.svg" alt="Two future directions after v0.5: v0.6 moves the database and private-node egress to managed cloud services; v1.0 moves the workloads to managed Kubernetes with cloud ingress and workload identities.">
+</p>
+
+| Version | Direction | Main additions |
+| --- | --- | --- |
+| v0.6 | Managed cloud services | Cloud SQL, Cloud NAT and cost review for managed resources. |
+| v1.0 | Managed Kubernetes | GKE, cloud ingress and integration with GKE workload identities. |
 
 <div align="right"><a href="#top">back to top</a></div>

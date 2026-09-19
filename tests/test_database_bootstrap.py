@@ -8,13 +8,18 @@ from pathlib import Path
 import pytest
 
 
-def test_bootstrap_failure_and_restart(tmp_path):
+def _shell():
     shell = shutil.which("bash")
     if not shell and os.name == "nt":
         candidate = Path("C:/Program Files/Git/bin/bash.exe")
         shell = str(candidate) if candidate.exists() else None
     if not shell:
         pytest.skip("bash is required for bootstrap control-flow checks")
+    return shell
+
+
+def test_bootstrap_failure_and_restart(tmp_path):
+    shell = _shell()
     source = Path(__file__).resolve().parents[1] / "deploy/helm/eps/files"
     for name in ("bootstrap-db.sh", "init-db.sh"):
         shutil.copyfile(source / name, tmp_path / name)
@@ -60,3 +65,41 @@ def test_bootstrap_failure_and_restart(tmp_path):
     assert run().returncode != 0
     assert not (tmp_path / "data/.eps-bootstrap-complete").exists()
     assert (tmp_path / "calls").read_text().splitlines()[-1].endswith("-m fast -w stop")
+
+
+def test_compose_exporter_credential_boundary(tmp_path):
+    shell = _shell()
+    source = Path(__file__).resolve().parents[1] / "observability/init-exporter-role.sh"
+    shutil.copyfile(source, tmp_path / "init-exporter-role.sh")
+    fake_psql = tmp_path / "psql"
+    fake_psql.write_text(
+        '#!/bin/sh\nprintf "%s\\n" "$@"\ncat\nexit "${PSQL_EXIT:-0}"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    fake_psql.chmod(0o755)
+    password = "synthetic-only'quoted;$(not-a-command)"
+    env = dict(os.environ, POSTGRES_USER="eps", POSTGRES_DB="eps")
+
+    def run(value, status="0"):
+        return subprocess.run(
+            [shell, "-c", 'export PATH="$PWD:$PATH"; /bin/sh ./init-exporter-role.sh'],
+            cwd=tmp_path,
+            env=dict(env, POSTGRES_EXPORTER_PASSWORD=value, PSQL_EXIT=status),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    result = run(password)
+    assert result.returncode == 0
+    assert password not in result.stdout + result.stderr
+    assert "\\getenv exporter_password POSTGRES_EXPORTER_PASSWORD" in result.stdout
+    assert "PASSWORD %L', :'exporter_password') \\gexec" in result.stdout
+    assert result.stdout.index("SET log_min_error_statement") < result.stdout.index("CREATE ROLE")
+    failed = run(password, "3")
+    assert failed.returncode == 3
+    assert password not in failed.stdout + failed.stderr
+    missing = run("")
+    assert missing.returncode != 0
+    assert missing.stdout == ""

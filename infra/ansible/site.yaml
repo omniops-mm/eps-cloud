@@ -24,3 +24,5 @@
     - k3s
     - role: images
       when: eps_image_bundle is defined
+    - role: platform
+      when: eps_platform_bundle is defined

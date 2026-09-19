@@ -1,0 +1,20 @@
+---
+- name: Check for changes - {{ platform_manifest_path }}
+  ansible.builtin.command:
+    cmd: >-
+      /usr/local/bin/k3s kubectl diff --server-side --field-manager=eps-platform
+      {% if platform_manifest_namespace is defined and platform_manifest_namespace %}-n {{ platform_manifest_namespace }} {% endif %}
+      -f {{ platform_manifest_path }}
+  register: platform_manifest_diff
+  changed_when: false
+  failed_when: platform_manifest_diff.rc not in [0, 1]
+
+- name: Apply only when it differs - {{ platform_manifest_path }}
+  ansible.builtin.command:
+    cmd: >-
+      /usr/local/bin/k3s kubectl apply --server-side --field-manager=eps-platform
+      {% if platform_manifest_namespace is defined and platform_manifest_namespace %}-n {{ platform_manifest_namespace }} {% endif %}
+      -f {{ platform_manifest_path }}
+  when: platform_manifest_diff.rc == 1
+  register: platform_manifest_apply
+  changed_when: true

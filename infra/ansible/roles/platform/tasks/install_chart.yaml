@@ -1,0 +1,51 @@
+---
+- name: Merge values and remove pull-secret references - {{ platform_chart_spec.release }}
+  ansible.builtin.command:
+    cmd: >-
+      {{ ansible_playbook_python }} {{ role_path }}/files/merge_helm_values.py
+      {% if platform_chart_spec.local_images | default(false) %}--local-images {% endif %}
+      {% for value_file in platform_chart_spec['values'] %}{{ playbook_dir }}/../../deploy/platform/{{ value_file }} {% endfor %}
+  delegate_to: localhost
+  register: platform_chart_values_render
+  changed_when: false
+
+- name: Check the installed release - {{ platform_chart_spec.release }}
+  ansible.builtin.command:
+    argv: [/usr/local/bin/helm, list, --filter, "^{{ platform_chart_spec.release }}$", --namespace, "{{ platform_chart_spec.namespace }}", --output, json]
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  register: platform_chart_release
+  changed_when: false
+
+- name: Read installed values - {{ platform_chart_spec.release }}
+  ansible.builtin.command:
+    argv: [/usr/local/bin/helm, get, values, "{{ platform_chart_spec.release }}", --namespace, "{{ platform_chart_spec.namespace }}", --output, json]
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  register: platform_chart_current_values
+  failed_when: false
+  changed_when: false
+
+- name: Compare installed chart and values - {{ platform_chart_spec.release }}
+  ansible.builtin.set_fact:
+    platform_chart_release_match: >-
+      {{ (platform_chart_release.stdout | from_json | length > 0) and
+         (platform_chart_release.stdout | from_json)[0].status == 'deployed' and
+         (platform_chart_release.stdout | from_json)[0].chart == platform_chart_spec.chart + '-' + platform_chart_spec.version }}
+    platform_chart_values_match: >-
+      {{ platform_chart_current_values.rc == 0 and
+         (platform_chart_current_values.stdout | from_json) == (platform_chart_values_render.stdout | from_yaml) }}
+
+- name: Reconcile only when inputs differ - {{ platform_chart_spec.release }}
+  ansible.builtin.command:
+    cmd: >-
+      /usr/local/bin/helm upgrade --install {{ platform_chart_spec.release }}
+      /var/lib/eps/platform/{{ platform_chart_spec.chart }}-{{ platform_chart_spec.version }}.tgz
+      --namespace {{ platform_chart_spec.namespace }} --wait --timeout 180s -f -
+    stdin: "{{ platform_chart_values_render.stdout }}"
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  when:
+    - not (platform_chart_release_match | bool) or not (platform_chart_values_match | bool)
+  register: platform_chart_install
+  changed_when: true

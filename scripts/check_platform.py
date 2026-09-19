@@ -329,7 +329,7 @@ def validate_telemetry_network(objects: list[dict]) -> None:
         ):
             raise ValueError("Telemetry policy target changed")
         clients = []
-        for rule in spec["ingress"]:
+        for rule in spec.get("ingress", []):
             for peer in rule["from"]:
                 for port in rule["ports"]:
                     namespace = peer.get(

@@ -131,7 +131,7 @@ def test_telemetry_rejects_expanded_access_and_receivers():
 
     policies = list(yaml.safe_load_all((PLATFORM / "telemetry-network.yaml").read_text()))
     validate_telemetry_network(policies)
-    for change in ("namespace", "port", "pod", "duplicate"):
+    for change in ("namespace", "port", "pod", "duplicate", "alloy", "missing"):
         changed = deepcopy(policies)
         rule = changed[2]["spec"]["ingress"][0]
         if change == "namespace":
@@ -140,6 +140,10 @@ def test_telemetry_rejects_expanded_access_and_receivers():
             rule["ports"][0]["port"] = 4317
         elif change == "pod":
             rule["from"][0]["podSelector"] = {}
+        elif change == "alloy":
+            changed[0]["spec"]["ingress"] = deepcopy(changed[1]["spec"]["ingress"])
+        elif change == "missing":
+            changed[2]["spec"].pop("ingress")
         else:
             changed[2] = deepcopy(changed[1])
         with pytest.raises(ValueError):

@@ -1,0 +1,442 @@
+---
+- name: Require the reviewed platform inputs.
+  ansible.builtin.assert:
+    that:
+      - eps_platform_bundle is defined
+      - eps_secret_store_manifest is defined
+      - eps_platform_bundle is directory
+      - eps_secret_store_manifest is file
+    fail_msg: >-
+      Platform installation requires the private chart bundle and a rendered
+      SecretStore manifest. Keep both outside the repository.
+
+- name: Load the reviewed chart pins.
+  ansible.builtin.set_fact:
+    platform_pins: "{{ lookup('ansible.builtin.file', playbook_dir + '/../../deploy/platform/versions.json') | from_json }}"
+    platform_argo_pin: "{{ (lookup('ansible.builtin.file', playbook_dir + '/../../deploy/platform/pending/charts.json') | from_json)['argo-cd'] }}"
+
+- name: Create the private platform directory.
+  ansible.builtin.file:
+    path: /var/lib/eps/platform
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Create the private pending configuration directory.
+  ansible.builtin.file:
+    path: /var/lib/eps/platform/pending
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install the bundled Helm binary.
+  ansible.builtin.copy:
+    src: "{{ eps_platform_bundle }}/helm"
+    dest: /usr/local/bin/helm
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copy reviewed chart archives.
+  ansible.builtin.copy:
+    src: "{{ eps_platform_bundle }}/{{ item.chart }}-{{ item.version }}.tgz"
+    dest: "/var/lib/eps/platform/{{ item.chart }}-{{ item.version }}.tgz"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - {chart: cert-manager, version: "{{ platform_pins['cert-manager'].version }}"}
+    - {chart: external-secrets, version: "{{ platform_pins['external-secrets'].version }}"}
+    - {chart: kube-prometheus-stack, version: "{{ platform_pins['kube-prometheus-stack'].version }}"}
+    - {chart: prometheus-postgres-exporter, version: "{{ platform_pins['prometheus-postgres-exporter'].version }}"}
+    - {chart: alloy, version: "{{ platform_pins.alloy.version }}"}
+    - {chart: loki, version: "{{ platform_pins.loki.version }}"}
+    - {chart: tempo, version: "{{ platform_pins.tempo.version }}"}
+    - {chart: prometheus-blackbox-exporter, version: "{{ platform_pins['prometheus-blackbox-exporter'].version }}"}
+    - {chart: prometheus-adapter, version: "{{ platform_pins['prometheus-adapter'].version }}"}
+    - {chart: argo-cd, version: "{{ platform_argo_pin.version }}"}
+  loop_control:
+    label: "{{ item.chart }}-{{ item.version }}"
+
+- name: Verify reviewed chart archive checksums.
+  ansible.builtin.stat:
+    path: "/var/lib/eps/platform/{{ item.chart }}-{{ item.version }}.tgz"
+    checksum_algorithm: sha256
+  register: platform_chart_checksums
+  loop:
+    - {chart: cert-manager, version: "{{ platform_pins['cert-manager'].version }}", sha256: "{{ platform_pins['cert-manager'].sha256 }}"}
+    - {chart: external-secrets, version: "{{ platform_pins['external-secrets'].version }}", sha256: "{{ platform_pins['external-secrets'].sha256 }}"}
+    - chart: kube-prometheus-stack
+      version: '{{ platform_pins[''kube-prometheus-stack''].version }}'
+      sha256: '{{ platform_pins[''kube-prometheus-stack''].sha256 }}'
+    - chart: prometheus-postgres-exporter
+      version: '{{ platform_pins[''prometheus-postgres-exporter''].version }}'
+      sha256: '{{ platform_pins[''prometheus-postgres-exporter''].sha256 }}'
+    - {chart: alloy, version: "{{ platform_pins.alloy.version }}", sha256: "{{ platform_pins.alloy.sha256 }}"}
+    - {chart: loki, version: "{{ platform_pins.loki.version }}", sha256: "{{ platform_pins.loki.sha256 }}"}
+    - {chart: tempo, version: "{{ platform_pins.tempo.version }}", sha256: "{{ platform_pins.tempo.sha256 }}"}
+    - chart: prometheus-blackbox-exporter
+      version: '{{ platform_pins[''prometheus-blackbox-exporter''].version }}'
+      sha256: '{{ platform_pins[''prometheus-blackbox-exporter''].sha256 }}'
+    - {chart: prometheus-adapter, version: "{{ platform_pins['prometheus-adapter'].version }}", sha256: "{{ platform_pins['prometheus-adapter'].sha256 }}"}
+    - {chart: argo-cd, version: "{{ platform_argo_pin.version }}", sha256: "{{ platform_argo_pin.digest }}"}
+  loop_control:
+    label: "{{ item.chart }}-{{ item.version }}"
+
+- name: Reject changed chart archives.
+  ansible.builtin.assert:
+    that: item.stat.checksum == item.item.sha256
+    fail_msg: "Chart archive checksum mismatch for {{ item.item.chart }}."
+  loop: "{{ platform_chart_checksums.results }}"
+  loop_control:
+    label: "{{ item.item.chart }}"
+
+- name: Copy platform configuration.
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../deploy/platform/{{ item }}"
+    dest: "/var/lib/eps/platform/{{ item }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - namespaces.yaml
+    - metadata-policy.yaml
+    - k3s-config.yaml
+    - traefik.yaml
+    - cert-manager-values.yaml
+    - eso-webhook-issuer.yaml
+    - eso-identities.yaml
+    - external-secrets-values.yaml
+    - external-secrets-eps-values.yaml
+    - external-secrets-monitoring-values.yaml
+    - secret-store.yaml.example
+    - external-secrets.yaml
+    - kube-prometheus-stack-values.yaml
+    - prometheus-postgres-exporter-values.yaml
+    - alloy-values.yaml
+    - loki-values.yaml
+    - tempo-values.yaml
+    - prometheus-blackbox-exporter-values.yaml
+    - prometheus-adapter-values.yaml
+    - telemetry-network.yaml
+    - exporter-networkpolicies.yaml
+    - blackbox-network.yaml
+    - private-issuer.yaml
+    - argocd-project.yaml
+    - argocd-application.yaml
+    - pending/argo-cd-values.yaml
+    - pending/argocd-eps-rbac.yaml
+  loop_control:
+    label: "{{ item }}"
+
+- name: Copy the operator-provided SecretStore manifest.
+  ansible.builtin.copy:
+    src: "{{ eps_secret_store_manifest }}"
+    dest: /var/lib/eps/platform/secret-store.yaml
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Copy dashboard sources for native ConfigMap provisioning.
+  ansible.builtin.copy:
+    content: >-
+      {{ lookup('ansible.builtin.file', playbook_dir + '/../../deploy/helm/eps/dashboards/' + item) | replace('__EPS_NAMESPACE__', 'eps') }}
+    dest: "/var/lib/eps/platform/{{ item }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - eps-jobs.json
+    - eps-red.json
+    - eps-resources.json
+
+- name: Check for the cert-manager namespace.
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, kubectl, get, namespace, cert-manager]
+  register: platform_cert_manager_namespace
+  changed_when: false
+  failed_when: false
+
+- name: Create the cert-manager namespace before installing its CRDs.
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, kubectl, create, namespace, cert-manager]
+  when: platform_cert_manager_namespace.rc != 0
+  register: platform_cert_manager_namespace_create
+  changed_when: true
+
+- name: Apply the cert-manager restricted PSA label.
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, kubectl, label, namespace, cert-manager, pod-security.kubernetes.io/enforce=restricted, --overwrite]
+  when: platform_cert_manager_namespace.rc != 0
+  changed_when: true
+
+- name: Read existing platform namespaces.
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, kubectl, get, namespaces, -o, json]
+  register: platform_existing_namespaces
+  changed_when: false
+
+- name: Create missing platform namespaces without changing existing labels.
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s kubectl create -f -
+    stdin: "{{ item | to_json }}"
+  loop: "{{ lookup('ansible.builtin.file', playbook_dir + '/../../deploy/platform/namespaces.yaml') | from_yaml_all | list }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
+  when: item.metadata.name not in ((platform_existing_namespaces.stdout | from_json)['items'] | map(attribute='metadata.name') | list)
+  changed_when: true
+
+- name: Apply the link-local policy to platform namespaces.
+  ansible.builtin.include_tasks: apply_manifest.yaml
+  vars:
+    platform_manifest_path: /var/lib/eps/platform/metadata-policy.yaml
+    platform_manifest_namespace: "{{ item }}"
+  loop: [cert-manager, external-secrets, monitoring]
+
+- name: Install cert-manager from the pinned archive.
+  ansible.builtin.include_tasks: install_chart.yaml
+  vars:
+    platform_chart_spec:
+      chart: cert-manager
+      version: "{{ platform_pins['cert-manager'].version }}"
+      release: cert-manager
+      namespace: cert-manager
+      values: [cert-manager-values.yaml]
+
+- name: Apply the cert-manager webhook issuer after CRDs exist.
+  ansible.builtin.include_tasks: apply_manifest.yaml
+  vars:
+    platform_manifest_path: /var/lib/eps/platform/eso-webhook-issuer.yaml
+
+- name: Install the two scoped External Secrets releases.
+  ansible.builtin.include_tasks: install_chart.yaml
+  vars:
+    platform_chart_spec:
+      chart: external-secrets
+      version: "{{ platform_pins['external-secrets'].version }}"
+      release: "external-secrets-{{ item.namespace }}"
+      namespace: external-secrets
+      local_images: true
+      values:
+        - external-secrets-values.yaml
+        - "external-secrets-{{ item.namespace }}-values.yaml"
+  loop:
+    - {namespace: eps}
+    - {namespace: monitoring}
+
+- name: Bootstrap the Argo Redis password Secret when absent.
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, kubectl, get, secret, argocd-redis, --namespace, argocd]
+  register: platform_argocd_redis_existing
+  changed_when: false
+  failed_when: false
+
+- name: Generate an Argo Redis password without exposing it in output.
+  ansible.builtin.command:
+    argv: [openssl, rand, -base64, "32"]
+  register: platform_argocd_redis_password
+  changed_when: false
+  no_log: true
+  when: platform_argocd_redis_existing.rc != 0
+
+- name: Build the Argo Redis Secret manifest in memory.
+  ansible.builtin.set_fact:
+    platform_argocd_redis_manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: argocd-redis
+        namespace: argocd
+      type: Opaque
+      stringData:
+        auth: "{{ platform_argocd_redis_password.stdout }}"
+  no_log: true
+  when: platform_argocd_redis_existing.rc != 0
+
+- name: Apply the generated Argo Redis Secret.
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s kubectl apply --server-side --field-manager=eps-platform -f -
+    stdin: "{{ platform_argocd_redis_manifest | to_json }}"
+  register: platform_argocd_redis_apply
+  changed_when: true
+  no_log: true
+  when: platform_argocd_redis_existing.rc != 0
+
+- name: Apply External Secrets federation identities and stores.
+  ansible.builtin.include_tasks: apply_manifest.yaml
+  vars:
+    platform_manifest_path: "/var/lib/eps/platform/{{ item }}"
+  loop:
+    - eso-identities.yaml
+    - secret-store.yaml
+    - external-secrets.yaml
+
+- name: Create the dashboard ConfigMap from the reviewed JSON sources.
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - create
+      - configmap
+      - eps-grafana-dashboards
+      - --namespace
+      - monitoring
+      - --from-file=/var/lib/eps/platform/eps-jobs.json
+      - --from-file=/var/lib/eps/platform/eps-red.json
+      - --from-file=/var/lib/eps/platform/eps-resources.json
+      - --dry-run=client
+      - -o
+      - yaml
+  register: platform_dashboards_configmap
+  changed_when: false
+
+- name: Apply the dashboard ConfigMap.
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s kubectl diff --server-side --field-manager=eps-platform -f -
+    stdin: "{{ platform_dashboards_configmap.stdout }}"
+  register: platform_dashboards_diff
+  changed_when: false
+  failed_when: platform_dashboards_diff.rc not in [0, 1]
+
+- name: Apply the dashboard ConfigMap only when it differs.
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s kubectl apply --server-side --field-manager=eps-platform -f -
+    stdin: "{{ platform_dashboards_configmap.stdout }}"
+  register: platform_dashboards_apply
+  changed_when: true
+  when: platform_dashboards_diff.rc == 1
+
+- name: Apply monitoring network boundaries.
+  ansible.builtin.include_tasks: apply_manifest.yaml
+  vars:
+    platform_manifest_path: /var/lib/eps/platform/telemetry-network.yaml
+    platform_manifest_namespace: monitoring
+
+- name: Install the pinned monitoring releases.
+  ansible.builtin.include_tasks: install_chart.yaml
+  vars:
+    platform_chart_spec:
+      chart: "{{ item.chart }}"
+      version: "{{ platform_pins[item.chart].version }}"
+      release: "{{ item.release }}"
+      namespace: "{{ item.namespace }}"
+      local_images: true
+      values: ["{{ item['values'] }}"]
+  loop:
+    - {chart: kube-prometheus-stack, release: monitoring, namespace: monitoring, values: kube-prometheus-stack-values.yaml}
+    - {chart: prometheus-postgres-exporter, release: postgres-exporter, namespace: eps, values: prometheus-postgres-exporter-values.yaml}
+    - {chart: alloy, release: alloy, namespace: monitoring, values: alloy-values.yaml}
+    - {chart: loki, release: loki, namespace: monitoring, values: loki-values.yaml}
+    - {chart: tempo, release: tempo, namespace: monitoring, values: tempo-values.yaml}
+    - {chart: prometheus-adapter, release: prometheus-adapter, namespace: monitoring, values: prometheus-adapter-values.yaml}
+    - {chart: prometheus-blackbox-exporter, release: blackbox, namespace: monitoring, values: prometheus-blackbox-exporter-values.yaml}
+  loop_control:
+    label: "{{ item.release }}"
+
+- name: Apply monitoring exporter and blackbox boundaries.
+  ansible.builtin.include_tasks: apply_manifest.yaml
+  vars:
+    platform_manifest_path: "/var/lib/eps/platform/{{ item }}"
+  loop:
+    - exporter-networkpolicies.yaml
+    - blackbox-network.yaml
+
+- name: Apply the private cert-manager issuer.
+  ansible.builtin.include_tasks: apply_manifest.yaml
+  vars:
+    platform_manifest_path: /var/lib/eps/platform/private-issuer.yaml
+
+- name: Read the Kubernetes API endpoint addresses for Argo egress.
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, kubectl, get, endpoints, kubernetes, -n, default, -o, json]
+  register: platform_kubernetes_endpoints
+  changed_when: false
+
+- name: Require an addressable Kubernetes API service.
+  ansible.builtin.assert:
+    that:
+      - >-
+        (platform_kubernetes_endpoints.stdout | from_json).subsets | default([])
+        | map(attribute='addresses') | map('default', []) | flatten | length > 0
+    fail_msg: "The Kubernetes API endpoint has no addresses for the private Argo policy."
+
+- name: Render the private Argo egress policy before installing Argo.
+  ansible.builtin.copy:
+    dest: /var/lib/eps/platform/private-argo.yaml
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: private-argo
+        namespace: argocd
+      spec:
+        podSelector: {}
+        policyTypes: [Ingress, Egress]
+        ingress:
+        - from:
+          - podSelector: {}
+        egress:
+        - to:
+          - podSelector: {}
+        - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+          ports:
+          - {protocol: TCP, port: 53}
+          - {protocol: UDP, port: 53}
+        - to:
+      {% for subset in (platform_kubernetes_endpoints.stdout | from_json).subsets | default([]) %}
+      {% for address in subset.addresses | default([]) %}
+          - ipBlock:
+              cidr: {{ address.ip }}/32
+      {% endfor %}
+      {% endfor %}
+          ports:
+          - {protocol: TCP, port: 443}
+          - {protocol: TCP, port: 6443}
+        - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+              except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 127.0.0.0/8]
+          ports:
+          - {protocol: TCP, port: 443}
+
+- name: Apply the private Argo egress policy before installing Argo.
+  ansible.builtin.include_tasks: apply_manifest.yaml
+  vars:
+    platform_manifest_path: /var/lib/eps/platform/private-argo.yaml
+
+- name: Install Argo CD from the pinned archive.
+  ansible.builtin.include_tasks: install_chart.yaml
+  vars:
+    platform_chart_spec:
+      chart: argo-cd
+      version: "{{ platform_argo_pin.version }}"
+      release: argocd
+      namespace: argocd
+      local_images: true
+      values: [pending/argo-cd-values.yaml]
+
+- name: Check for an existing EPS Argo Application.
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, kubectl, get, application, eps, --namespace, argocd]
+  register: platform_argocd_application_existing
+  changed_when: false
+  failed_when: false
+
+- name: Apply the Argo project, application RBAC and application definition.
+  ansible.builtin.include_tasks: apply_manifest.yaml
+  vars:
+    platform_manifest_path: "/var/lib/eps/platform/{{ item }}"
+  loop:
+    - pending/argocd-eps-rbac.yaml
+    - argocd-project.yaml
+    - argocd-application.yaml
+  when:
+    - item != 'argocd-application.yaml' or (eps_apply_argocd_application | default(false) | bool) or platform_argocd_application_existing.rc != 0
